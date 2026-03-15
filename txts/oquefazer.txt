@@ -1,0 +1,407 @@
+Plano técnico do projeto
+1. Objetivo técnico do sistema 
+
+Construir uma aplicação cliente-servidor que permita: 
+-cifrar um fichiro para uma data/hora futura
+-gerar chave a partir de:
+	-email
+	-segredo interno do sistema
+	-data/hora
+-anexar um HMAC
+-permitir mais tarde: 
+	-consultar a chave do momento atual
+	-decifrar um ficheiro usanda a chave fornecida pelo utilizador 
+	-verificar a integridade do conteúdo através do HMAC
+
+
+2. Stack recomendada 
+
+Backend
+-Python
+-Flask ou FastAPI (Flask se quisermos simples e rápido, FlaskAPI se quisermos uma cena mais fixe)
+
+Fronthend 
+-HTML + CSS + JavaScript 
+
+Criptografia
+-biblioteca Python cryptography 
+-hashlib e hmac para derivação e autenticação
+
+Base de dados
+-SQLite (ou o que quisermos) 
+
+
+3.Arquitetura do projeto
+
+Separação lógica 
+	Cliente: (responsável por) 
+		-receber ficheiro 
+		-receber email 
+		-receber data/hora 
+		-enviar pedido ao servidor
+		-mostrar resultados
+
+	Servidor: (responsável por)
+		-derivar chaves 
+		-cifrar ficheiros
+		-gerar HMAC 
+		-validar data/hora
+		-devolver chave atual 
+		-decifrar e verificar integridade
+
+
+4.Estrutura de pastas sugerida
+
+see-u-l4ter/
+	server/
+		app.py 
+		crypto_utils.py 
+		db.py 
+		config.py 
+		models.py 
+		storage/
+			encrypted/
+			temp/
+	client/
+		index.html
+		encrypt.html
+		decrypt.html
+		current-key.html
+		style.css
+		script.js
+	database/
+		seeul4ter.db
+	requirements.txt
+	README.md
+5.Funcionalidades a implementar por fases
+
+Fase 1 - só o essencial 
+
+1.Página de cifra futura 
+Formulário com:
+	-email 
+	-data/hora futura
+	-upload de ficheiro
+	-modo AES:
+		-CBC 
+		-CTR
+	-modo HMAC:	
+		-SHA256
+		-SHA512 
+2. Geração da chave
+
+Lógica do enunciado:
+	key_material = SHA256(email || segredo || data_hora)
+
+Lógica do enunciado melhorada: (pelo ChatGPT)
+	aes_key  = SHA256("AES"  || email || segredo || data_hora)
+	hmac_key = SHA256("HMAC" || email || segredo || data_hora)		 
+3.Cifra do ficheiro 
+
+Suportar:
+	- AES-128-CBC
+	- AES-128-CTR
+4.Geração do HMAC 
+
+Gerar dados cifrados e os metadados relevantes
+	-modo
+	-iv/nonce
+	-ciphertext
+	-timestamp 
+5.Página da chave atual
+
+Uma interface onde qualquer utilizador mete:
+	-email
+E o sistesma devolve a chave correspondente ao momento atual, nunca futura nem passada. 
+6.Página de decifra 
+
+Formulário com:
+	-chave
+	-ficheiro cifrado 
+O sistema:
+	-tenta decifrar
+	-verifica HMAC 
+	-informa se a integridade falhou
+6.Formato do ficheiro cifrado
+Não devolver só bites cifrado soltos. Criar formato estruturado. 
+
+Guardar o resultado final em JSON + Base 64 ou num ficheiro com cabeçalho. 
+
+Usar JSON: (exemplo) 
+	{
+  	"email": "exemplo@exemplo.com",
+  	"timestamp": "2030-05-25T12:00:00",
+  	"cipher": "AES-128-CBC",
+  	"hmac": "SHA256",
+  	"iv": "BASE64...",
+  	"ciphertext": "BASE64...",
+ 	 "tag": "BASE64..."
+	}	
+
+Vantagens: 
+	-fácil de inspecionar
+	-fácil de demonstrar na apresentação 
+	-mais simples para debug 
+
+
+7.Modelo da base de dados
+
+Guardar pelo menos o registo das operações. 
+
+Tabela encrypted_files
+campos:
+	-id 
+	-email 
+	-original_filename
+	-scheluded_datetime
+	-cipher_mode
+	-hmac_mode
+	-file_path
+	-created_at
+Se usarmos autenticação depois criamos uma tabela users. 
+
+Tabela users
+campos:
+	-id 
+	-email
+	-password_hash
+	-created_at
+
+
+8.Endpoints da API 
+
+POST /api/encrypt
+Recebe:
+	-email 
+	-data/hora
+	-ficheiro
+	-modo AES
+	-modo HMAC
+Faz:
+	-deriva chave
+	-cifra
+	-gera HMAC
+	-devolve criptograma
+
+POST /api/decrypt
+Recebe:
+	-chave
+	-ficheiro cifrado
+Faz:
+	-lê metadados
+	-verifica HMAC
+	-tenta decifrar
+	-devolve ficheiro ou erro
+
+GET /api/current-key?email=...
+Recebe:
+	-email
+
+Faz:
+	-calcula chave da data/hora atual
+	-devolve essa chave
+
+
+
+9. Como tratar a data/hora
+
+Importante
+
+Pelo texto, parece mais consistente usar hora exata como unidade principal, por exemplo:
+	- 2026-03-14 18:00
+	- 2030-05-25 12:00
+
+Assim a chave muda de hora a hora.
+Isso também encaixa melhor na funcionalidade “mostrar a chave do momento atual”.
+
+
+
+10. Derivação das chaves
+
+
+Entrada
+	-email normalizado em lowercase
+	-segredo interno do sistema
+	-timestamp normalizado
+
+Vantagens
+	-simples
+	-previsível
+	-fácil de explicar
+	-alinhado com o enunciado
+
+
+11. Processo completo de cifra
+
+Fluxo
+	1.utilizador envia email + data/hora + ficheiro
+	2.servidor normaliza timestamp
+	3.servidor deriva aes_key
+	4.servidor deriva hmac_key
+	5.servidor gera IV/nonce aleatório
+	6.servidor cifra ficheiro
+	7.servidor calcula HMAC
+	8.servidor devolve ficheiro .json ou .seelater
+
+
+
+12. Processo completo de decifra
+
+Fluxo
+	1.utilizador submete chave + ficheiro cifrado
+	2.servidor lê metadados
+	3.servidor recalcula/verifica HMAC
+	4.se HMAC falhar:
+		-avisa que a integridade não foi confirmada
+	5.se HMAC passar:
+		-tenta decifrar com a chave dada
+	6.se a chave estiver correta:
+		-devolve ficheiro original
+	7.se não:
+		-devolve erro de decifra
+
+
+
+13. Ordem exata de implementação
+
+Etapa 1
+
+Criar a estrutura do projeto:
+	-Flask
+	-pastas
+	-HTML base
+
+Etapa 2
+
+Fazer só um endpoint /api/current-key
+	-recebe email
+	-usa segredo
+	-usa hora atual
+	-devolve chave
+
+Etapa 3
+
+Criar utilitário de derivação:
+	-função normalize_timestamp()
+	-função derive_aes_key()
+	-função derive_hmac_key()
+
+Etapa 4
+
+Implementar cifra AES-128-CBC
+	-depois AES-128-CTR
+
+Etapa 5
+
+Implementar HMAC-SHA256
+	-depois SHA512 opcional
+
+Etapa 6
+
+Construir /api/encrypt
+	-upload de ficheiro
+	-geração do objeto final
+
+Etapa 7
+
+Construir /api/decrypt
+	-leitura do objeto
+	-verificação de integridade
+	-decifra
+
+Etapa 8
+
+Fazer frontend minimamente apresentável
+
+Etapa 9
+
+Adicionar SQLite para registo
+
+Etapa 10
+
+Adicionar extensões opcionais
+	-login
+	-acesso a chaves passadas
+	-RSA
+
+
+15. Extensões que valem a pena
+
+Das opcionais, eu escolheria estas por ordem:
+
+1. Escolha entre CBC e CTR
+
+Boa porque:
+	-fácil de mostrar
+	-demonstra conhecimento prático
+
+2. Escolha entre HMAC-SHA256 e HMAC-SHA512
+
+Também simples de adicionar
+
+3. Registo de utilizadores
+
+Boa para valorizar, mas já dá mais trabalho
+
+4. Acesso a chaves passadas
+
+Só faz sentido se tiveres autenticação
+
+5. RSA
+
+Boa para impressionar, mas mais pesada e talvez desnecessária numa primeira versão
+
+
+16. Ataque para a apresentação
+
+O enunciado pede que penses numa forma de atacar o sistema  
+
+Uma ideia muito boa e fácil de explicar:
+
+Ataque por falha de desenho: reutilização da mesma chave para cifra e HMAC
+
+Se o sistema usar mal o material criptográfico, pode introduzir fragilidades.
+
+Mas ainda melhor para apresentação:
+
+Ataque por manipulação sem verificação de integridade
+
+Se alguém alterar o criptograma e o sistema tentar decifrar sem validar HMAC primeiro:
+	-pode aceitar dados corrompidos
+	-pode devolver lixo
+	-pode abrir portas a ataques
+
+Demonstração prática
+	-cifras um ficheiro
+	-alteras 1 byte no campo ciphertext
+	-tentas decifrar
+	-mostras que:
+		-sem HMAC bem implementado, o sistema podia aceitar
+		-com HMAC, o sistema deteta alteração
+
+
+Outra hipótese:
+
+Ataque se o segredo do sistema estiver hardcoded e exposto
+
+Se o atacante obtiver o segredo interno:
+	-consegue derivar chaves futuras
+	-quebra a ideia de cápsula do tempo
+
+
+
+17. Cuidados de implementação
+
+Não fazer:
+	-usar hora do cliente em vez da do servidor
+	-guardar segredo no código fonte público
+	-usar a mesma chave sem separação para tudo
+	-tentar decifrar antes de validar integridade
+	-aceitar qualquer formato de data sem normalização
+
+Faz isto
+	•	segredo em .env
+	•	timestamp normalizado
+	•	chaves separadas para AES e HMAC
+	•	HMAC verificado antes da decifra
+	•	mensagens de erro claras
