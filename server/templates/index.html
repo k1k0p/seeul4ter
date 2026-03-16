@@ -4,75 +4,101 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SEE-U-L4TER</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"> 
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
+
 <body>
-    <div class="container">
-        <h1>SEE-U-L4TER</h1>
-        <p class="subtitle">Geração de chaves temporais</p>
+    <header class="navbar">
+        <div class="navbar-inner">
+            <div class="brand">SEE-U-L4TER</div>
+            <nav class="nav-links">
+                <a href="{{ url_for('index') }}">Início</a>
+                <a href="{{ url_for('encrypt_page') }}">Cifrar</a>
+                <a href="{{ url_for('decrypt_page') }}">Decifrar</a>
+                <a href="{{ url_for('history_page') }}">Histórico</a>
+            </nav>
+        </div>
+    </header>
 
-        <section class="card">
-            <h2>Chave do momento atual</h2>
-
-            <form method="POST">
-                <input type="hidden" name="form_type" value="current_key">
-
-                <label for="email_current">Email</label>
-                <input
-                    type="email"
-                    id="email_current"
-                    name="email"
-                    required
-                    placeholder="exemplo@email.com"
-                >
-
-                <button type="submit">Gerar chave atual</button>
-            </form>
-
-            {% if current_result %}
-            <div class="result">
-                <h3>Resultado atual</h3>
-                <p><strong>Email:</strong> {{ current_result.email }}</p>
-                <p><strong>Timestamp:</strong> {{ current_result.timestamp }}</p>
-                <p><strong>Chave AES-128:</strong> {{ current_result.aes_key_hex }}</p>
-            </div>
-            {% endif %}
+    <main class="page">
+        <section class="hero">
+            <h1>Cápsula do Tempo Criptográfica</h1>
+            <p>
+            Sistema web para cifra temporal de ficheiros, com desbloqueio condicionado por data/hora,
+            derivação de chaves temporais e verificação de integridade antes da decifra.
+            </p>
         </section>
 
-        <section class="card">
-            <h2>Chave para data futura</h2>
+        <section class="grid">
+            <section class="card">
+                <h2>Chave do momento atual</h2>
+                <p class="section-text">
+                    Usa o email para gerar a chave AES correspondente à hora atual do servidor.
+                </p>
 
-            <form method="POST">
-                <input type="hidden" name="form_type" value="future_key">
+                <form method="POST">
+                    <input type="hidden" name="form_type" value="current_key">
 
-                <label for="email_future">Email</label>
-                <input
-                    type="email"
-                    id="email_future"
-                    name="email"
-                    required
-                    placeholder="exemplo@email.com"
-                >
+                    <label for="email_current">Email</label>
+                    <input
+                        type="email"
+                        id="email_current"
+                        name="email"
+                        required
+                        placeholder="exemplo@email.com"
+                    >
 
-                <label for="future_datetime">Data e hora futura</label>
-                <input
-                    type="datetime-local"
-                    id="future_datetime"
-                    name="future_datetime"
-                    required
-                >
+                    <button type="submit">Gerar chave atual</button>
+                </form>
 
-                <button type="submit">Gerar chave futura</button>
-            </form>
+                {% if current_result %}
+                <div class="result">
+                    <h3>Resultado atual</h3>
+                    <p><strong>Email:</strong> {{ current_result.email }}</p>
+                    <p><strong>Timestamp:</strong> {{ current_result.timestamp }}</p>
+                    <p><strong>Chave AES-128:</strong> {{ current_result.aes_key_hex }}</p>
+                </div>
+                {% endif %}
+            </section>
 
-            {% if future_result %}
-            <div class="result">
-                <h3>Resultado futuro</h3>
-                <p><strong>Email:</strong> {{ future_result.email }}</p>
-                <p><strong>Timestamp:</strong> {{ future_result.timestamp }}</p>
-                <p><strong>Chave AES-128:</strong> {{ future_result.aes_key_hex }}</p>
-            </div>
-            {% endif %}
+            <section class="card">
+                <h2>Chave para data futura</h2>
+                <p class="section-text">
+                    Gera a chave correspondente a um instante futuro específico.
+                </p>
+
+                <form method="POST">
+                    <input type="hidden" name="form_type" value="future_key">
+
+                    <label for="email_future">Email</label>
+                    <input
+                        type="email"
+                        id="email_future"
+                        name="email"
+                        required
+                        placeholder="exemplo@email.com"
+                    >
+
+                    <label for="future_datetime">Data e hora futura</label>
+                    <input
+                        type="datetime-local"
+                        id="future_datetime"
+                        name="future_datetime"
+                        required
+                    >
+
+                    <button type="submit">Gerar chave futura</button>
+                </form>
+
+                {% if future_result %}
+                <div class="result">
+                    <h3>Resultado futuro</h3>
+                    <p><strong>Email:</strong> {{ future_result.email }}</p>
+                    <p><strong>Timestamp:</strong> {{ future_result.timestamp }}</p>
+                    <p><strong>Chave AES-128:</strong> {{ future_result.aes_key_hex }}</p>
+                </div>
+                {% endif %}
+            </section>
         </section>
 
         {% if error %}
@@ -80,14 +106,9 @@
             <p>{{ error }}</p>
         </div>
         {% endif %}
-    </div>
 
-    <section class="card">
-    <h2>Outras funcionalidades</h2>
-    <p><a href="{{ url_for('encrypt_page') }}">Ir para a página de cifra de ficheiros</a></p>
-    <p><a href="{{ url_for('decrypt_page') }}">Ir para a página de decifra de ficheiros</a></p>
-    <p><a href="{{ url_for('history_page') }}">Ver histórico de ficheiros cifrados</a></p>
-    </section>
-
+        <p class="footer-note">Projeto académico de Segurança Informática</p>
+    </main>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>

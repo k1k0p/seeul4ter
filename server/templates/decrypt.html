@@ -7,39 +7,67 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <div class="container">
-        <h1>SEE-U-L4TER</h1>
-        <p class="subtitle">Decifrar ficheiro cifrado</p>
+    <header class="navbar">
+        <div class="navbar-inner">
+            <div class="brand">SEE-U-L4TER</div>
+            <nav class="nav-links">
+                <a href="{{ url_for('index') }}">Início</a>
+                <a href="{{ url_for('encrypt_page') }}">Cifrar</a>
+                <a href="{{ url_for('decrypt_page') }}">Decifrar</a>
+                <a href="{{ url_for('history_page') }}">Histórico</a>
+            </nav>
+        </div>
+    </header>
 
-        <section class="card">
-            <h2>Decifra AES-128-CBC</h2>
-
-            <form method="POST" enctype="multipart/form-data">
-                <label for="key_hex">Chave AES-128 (hexadecimal)</label>
-                <input
-                    type="text"
-                    id="key_hex"
-                    name="key_hex"
-                    required
-                    placeholder="Ex.: 0123456789abcdef..."
-                >
-
-                <label for="file">Ficheiro cifrado (.encrypted.json)</label>
-                <input
-                    type="file"
-                    id="file"
-                    name="file"
-                    required
-                >
-
-                <button type="submit">Verificar e decifrar</button>
-            </form>
+    <main class="page">
+        <section class="hero">
+            <h1>Decifrar ficheiro</h1>
+            <p>
+                Faz upload do pacote cifrado, introduz a chave AES correta e deixa o sistema validar o tempo, o HMAC e a chave.
+            </p>
         </section>
 
-        <section class="card">
-            <h2>Navegação</h2>
-            <p><a href="{{ url_for('index') }}">Voltar à página principal</a></p>
-            <p><a href="{{ url_for('encrypt_page') }}">Ir para a página de cifra</a></p>
+        <section class="grid">
+            <section class="card">
+                <h2>Decifra AES-128-CBC</h2>
+                <p class="section-text">
+                    A operação só será permitida se a data/hora definida já tiver sido atingida.
+                </p>
+
+                <form method="POST" enctype="multipart/form-data">
+                    <label for="key_hex">Chave AES-128 (hexadecimal)</label>
+                    <input
+                        type="text"
+                        id="key_hex"
+                        name="key_hex"
+                        required
+                        placeholder="Ex.: 0123456789abcdef..."
+                    >
+
+                    <label for="file">Ficheiro cifrado (.encrypted.json)</label>
+                    <input type="file" id="file" name="file" required>
+
+                    <button type="submit">Verificar e decifrar</button>
+                </form>
+            </section>
+
+            <section class="card">
+                <h2>Validações realizadas</h2>
+                <p class="section-text">
+                    Antes de devolver o ficheiro original, o sistema valida:
+                </p>
+
+                <div class="info-box">
+                    1. Se o momento de desbloqueio já foi atingido<br>
+                    2. Se o HMAC continua válido<br>
+                    3. Se a chave AES corresponde ao email e ao timestamp do pacote
+                </div>
+
+                <div class="actions" style="margin-top:16px;">
+                    <a href="{{ url_for('index') }}">Voltar ao início</a>
+                    <a href="{{ url_for('encrypt_page') }}">Ir para cifra</a>
+                </div>
+            </section>
         </section>
 
         {% if error %}
@@ -47,6 +75,7 @@
             <p>{{ error }}</p>
         </div>
         {% endif %}
-    </div>
+    </main>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>

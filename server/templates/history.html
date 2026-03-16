@@ -7,55 +7,65 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <div class="container">
-        <h1>SEE-U-L4TER</h1>
-        <p class="subtitle">Histórico de ficheiros cifrados</p>
+    <header class="navbar">
+        <div class="navbar-inner">
+            <div class="brand">SEE-U-L4TER</div>
+            <nav class="nav-links">
+                <a href="{{ url_for('index') }}">Início</a>
+                <a href="{{ url_for('encrypt_page') }}">Cifrar</a>
+                <a href="{{ url_for('decrypt_page') }}">Decifrar</a>
+                <a href="{{ url_for('history_page') }}">Histórico</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="page">
+        <section class="hero">
+            <h1>Histórico</h1>
+            <p>
+                Consulta os registos das operações de cifra guardadas na base de dados local.
+            </p>
+        </section>
 
         <section class="card">
-            <h2>Registos</h2>
+            <h2>Registos de cifra</h2>
 
             {% if records %}
-                <div class="table-wrapper">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>ID</th>
-                                <th>Email</th>
-                                <th>Ficheiro original</th>
-                                <th>Data/hora programada</th>
-                                <th>AES</th>
-                                <th>HMAC</th>
-                                <th>Ficheiro gerado</th>
-                                <th>Criado em</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for record in records %}
-                            <tr>
-                                <td>{{ record.id }}</td>
-                                <td>{{ record.email }}</td>
-                                <td>{{ record.original_filename }}</td>
-                                <td>{{ record.scheduled_datetime }}</td>
-                                <td>{{ record.aes_mode }}</td>
-                                <td>{{ record.hmac_mode }}</td>
-                                <td>{{ record.file_path }}</td>
-                                <td>{{ record.created_at }}</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Email</th>
+                            <th>Ficheiro original</th>
+                            <th>Data/hora programada</th>
+                            <th>AES</th>
+                            <th>HMAC</th>
+                            <th>Ficheiro gerado</th>
+                            <th>Criado em</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for record in records %}
+                        <tr>
+                            <td>{{ record.id }}</td>
+                            <td>{{ record.email }}</td>
+                            <td>{{ record.original_filename }}</td>
+                            <td>{{ record.scheduled_datetime }}</td>
+                            <td>{{ record.aes_mode }}</td>
+                            <td>{{ record.hmac_mode }}</td>
+                            <td>{{ record.file_path }}</td>
+                            <td>{{ record.created_at }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
             {% else %}
-                <p>Ainda não existem registos.</p>
+            <p class="section-text">Ainda não existem registos guardados.</p>
             {% endif %}
         </section>
-
-        <section class="card">
-            <h2>Navegação</h2>
-            <p><a href="{{ url_for('index') }}">Voltar à página principal</a></p>
-            <p><a href="{{ url_for('encrypt_page') }}">Ir para a página de cifra</a></p>
-            <p><a href="{{ url_for('decrypt_page') }}">Ir para a página de decifra</a></p>
-        </section>
-    </div>
+    </main>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>    
 </body>
 </html>

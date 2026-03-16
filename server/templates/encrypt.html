@@ -7,46 +7,58 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <div class="container">
-        <h1>SEE-U-L4TER</h1>
-        <p class="subtitle">Cifrar ficheiro para uma data futura</p>
+    <header class="navbar">
+        <div class="navbar-inner">
+            <div class="brand">SEE-U-L4TER</div>
+            <nav class="nav-links">
+                <a href="{{ url_for('index') }}">Início</a>
+                <a href="{{ url_for('encrypt_page') }}">Cifrar</a>
+                <a href="{{ url_for('decrypt_page') }}">Decifrar</a>
+                <a href="{{ url_for('history_page') }}">Histórico</a>
+            </nav>
+        </div>
+    </header>
 
-        <section class="card">
-            <h2>Cifra AES-128-CBC</h2>
-
-            <form method="POST" enctype="multipart/form-data">
-                <label for="email">Email</label>
-                <input
-                    type="email"
-                    id="email"
-                    name="email"
-                    required
-                    placeholder="exemplo@email.com"
-                >
-
-                <label for="future_datetime">Data e hora futura</label>
-                <input
-                    type="datetime-local"
-                    id="future_datetime"
-                    name="future_datetime"
-                    required
-                >
-
-                <label for="file">Ficheiro</label>
-                <input
-                    type="file"
-                    id="file"
-                    name="file"
-                    required
-                >
-
-                <button type="submit">Cifrar ficheiro</button>
-            </form>
+    <main class="page">
+        <section class="hero">
+            <h1>Cifrar ficheiro</h1>
+            <p>
+                Faz upload de um ficheiro, escolhe uma data futura e gera um pacote cifrado em JSON.
+            </p>
         </section>
 
-        <section class="card">
-            <h2>Navegação</h2>
-            <p><a href="{{ url_for('index') }}">Voltar à página principal</a></p>
+        <section class="grid">
+            <section class="card">
+                <h2>Cifra AES-128-CBC</h2>
+                <p class="section-text">
+                    O ficheiro será cifrado com uma chave derivada do email, do segredo interno e da data/hora.
+                </p>
+
+                <form method="POST" enctype="multipart/form-data">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" name="email" required placeholder="exemplo@email.com">
+
+                    <label for="future_datetime">Data e hora futura</label>
+                    <input type="datetime-local" id="future_datetime" name="future_datetime" required>
+
+                    <label for="file">Ficheiro</label>
+                    <input type="file" id="file" name="file" required>
+
+                    <button type="submit">Cifrar ficheiro</button>
+                </form>
+            </section>
+
+            <section class="card">
+                <h2>Notas</h2>
+                <p class="section-text">
+                    O pacote gerado inclui IV, ciphertext e HMAC. A decifra só será aceite após o momento definido.
+                </p>
+
+                <div class="actions">
+                    <a href="{{ url_for('index') }}">Voltar ao início</a>
+                    <a href="{{ url_for('decrypt_page') }}">Ir para decifra</a>
+                </div>
+            </section>
         </section>
 
         {% if error %}
@@ -54,6 +66,7 @@
             <p>{{ error }}</p>
         </div>
         {% endif %}
-    </div>
+    </main>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>
