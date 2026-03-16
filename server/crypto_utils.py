@@ -89,3 +89,51 @@ def build_encrypted_package(email: str, timestamp: str, original_filename: str, 
     }
 
     return json.dumps(package, indent=4)
+
+def verify_hmac_sha256(hmac_key_bytes: bytes, email: str, timestamp: str, algorithm: str, original_filename: str, iv: bytes, ciphertext: bytes, received_hmac: str) -> bool:
+    expected_hmac = compute_hmac_sha256(
+        hmac_key_bytes=hmac_key_bytes,
+        email=email,
+        timestamp=timestamp,
+        algorithm=algorithm,
+        original_filename=original_filename,
+        iv=iv,
+        ciphertext=ciphertext
+    )
+
+    return hmac.compare_digest(expected_hmac, received_hmac)
+
+def decrypt_file_aes_cbc(ciphertext: bytes, key_bytes: bytes, iv: bytes) -> bytes:
+    cipher = Cipher(algorithms.AES(key_bytes), modes.CBC(iv))
+    decryptor = cipher.decryptor()
+    padded_plaintext = decryptor.update(ciphertext) + decryptor.finalize()
+
+    unpadder = padding.PKCS7(128).unpadder()
+    plaintext = unpadder.update(padded_plaintext) + unpadder.finalize()
+
+    return plaintext
+
+def load_encrypted_package(json_bytes: bytes) -> dict:
+    package = json.loads(json_bytes.decode("utf-8"))
+
+    return {
+        "email": package["email"],
+        "timestamp": package["timestamp"],
+        "algorithm": package["algorithm"],
+        "hmac_algorithm": package["hmac_algorithm"],
+        "original_filename": package["original_filename"],
+        "iv": base64.b64decode(package["iv"]),
+        "ciphertext": base64.b64decode(package["ciphertext"]),
+        "hmac": package["hmac"]
+    }
+
+def get_current_server_time() -> datetime:
+    return datetime.now()
+
+def parse_package_timestamp(timestamp_str: str) -> datetime:
+    return datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S")
+
+def is_unlock_time_reached(timestamp_str: str) -> bool:
+    target_time = parse_package_timestamp(timestamp_str)
+    current_time = get_current_server_time()
+    return current_time >= target_time

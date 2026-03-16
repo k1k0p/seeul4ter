@@ -130,3 +130,26 @@ a {
 a:hover {
     text-decoration: underline;
 }
+
+.table-wrapper {
+    overflow-x: auto;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 12px;
+    font-size: 14px;
+}
+
+th,
+td {
+    border: 1px solid #d9dee3;
+    padding: 10px;
+    text-align: left;
+    vertical-align: top;
+}
+
+th {
+    background: #f1f5f9;
+}

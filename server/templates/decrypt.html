@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Decifrar ficheiro - SEE-U-L4TER</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>SEE-U-L4TER</h1>
+        <p class="subtitle">Decifrar ficheiro cifrado</p>
+
+        <section class="card">
+            <h2>Decifra AES-128-CBC</h2>
+
+            <form method="POST" enctype="multipart/form-data">
+                <label for="key_hex">Chave AES-128 (hexadecimal)</label>
+                <input
+                    type="text"
+                    id="key_hex"
+                    name="key_hex"
+                    required
+                    placeholder="Ex.: 0123456789abcdef..."
+                >
+
+                <label for="file">Ficheiro cifrado (.encrypted.json)</label>
+                <input
+                    type="file"
+                    id="file"
+                    name="file"
+                    required
+                >
+
+                <button type="submit">Verificar e decifrar</button>
+            </form>
+        </section>
+
+        <section class="card">
+            <h2>Navegação</h2>
+            <p><a href="{{ url_for('index') }}">Voltar à página principal</a></p>
+            <p><a href="{{ url_for('encrypt_page') }}">Ir para a página de cifra</a></p>
+        </section>
+
+        {% if error %}
+        <div class="error">
+            <p>{{ error }}</p>
+        </div>
+        {% endif %}
+    </div>
+</body>
+</html>
