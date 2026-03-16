@@ -1,0 +1,225 @@
+Sim. No fundo, este trabalho consiste em construíres uma “cápsula do tempo” para ficheiros.
+
+Ou seja:
+	•	o utilizador escolhe um ficheiro
+	•	escolhe uma data e hora
+	•	o sistema cifra esse ficheiro
+	•	e a ideia é que ele só possa ser aberto com a chave certa daquele momento
+
+A lógica do trabalho é esta
+
+Imagina que queres guardar uma mensagem que só deve ser aberta em:
+
+25 de maio de 2030 às 12h00
+
+O sistema vai usar essa data/hora, juntamente com outras coisas, para gerar uma chave.
+Depois usa essa chave para cifrar o ficheiro.
+
+Mais tarde, quando chegar esse momento, o utilizador pode obter a chave correspondente e tentar decifrar.
+
+⸻
+
+Em que consiste, na prática
+
+Tens de fazer uma aplicação com cliente e servidor.
+
+Cliente
+
+É a parte visual, onde o utilizador:
+	•	mete o email
+	•	escolhe a data/hora
+	•	faz upload do ficheiro
+	•	pede para cifrar
+	•	mais tarde tenta decifrar
+
+Servidor
+
+É a parte “importante”, onde acontece a lógica toda:
+	•	gerar a chave com base no email + segredo interno + data/hora
+	•	cifrar o ficheiro com AES
+	•	gerar o HMAC
+	•	devolver a chave do momento atual
+	•	verificar integridade
+	•	decifrar o ficheiro
+
+⸻
+
+A ideia central do sistema
+
+O sistema gira à volta de chaves temporais.
+
+Ou seja, a chave não é uma password qualquer inventada pelo utilizador.
+É uma chave que o sistema calcula com base em:
+	•	email do utilizador
+	•	segredo interno do sistema
+	•	data/hora
+
+Então, para momentos diferentes, tens chaves diferentes.
+
+Exemplo simples
+
+Para o mesmo email:
+	•	chave das 10h00 → uma
+	•	chave das 11h00 → outra
+	•	chave de 25/05/2030 12h00 → outra diferente
+
+⸻
+
+O que tens mesmo de implementar
+
+1. Landing page
+
+Uma página onde o utilizador mete o email e o sistema mostra a chave do momento atual.
+
+Isto serve para demonstrar que o sistema sabe gerar a chave correspondente ao tempo presente.
+
+⸻
+
+2. Página para cifrar
+
+Outra interface onde o utilizador:
+	•	mete o email
+	•	escolhe uma data/hora futura
+	•	escolhe um ficheiro
+	•	escolhe modo AES
+	•	escolhe modo HMAC
+
+Depois o sistema:
+	•	gera a chave dessa data/hora
+	•	cifra o ficheiro
+	•	gera um HMAC
+	•	devolve o criptograma
+
+⸻
+
+3. Página para decifrar
+
+Outra interface onde o utilizador:
+	•	fornece a chave
+	•	fornece o ficheiro cifrado
+
+Depois o sistema:
+	•	verifica o HMAC
+	•	tenta decifrar
+	•	avisa se a integridade falhou
+	•	devolve o ficheiro original se tudo correr bem
+
+⸻
+
+O que é que o professor quer avaliar aqui
+
+Não é só “fazer uma app que cifra ficheiros”.
+
+O objetivo é perceber se tu entendes:
+	•	como gerar chaves de forma determinística
+	•	como usar o tempo como parte da chave
+	•	como separar cliente e servidor
+	•	como usar AES para confidencialidade
+	•	como usar HMAC para integridade
+	•	porque é que um sistema destes pode ter limitações e ataques
+
+⸻
+
+O que significa a tal “cápsula do tempo”
+
+Significa isto:
+	•	hoje cifras o ficheiro para uma data futura
+	•	o ficheiro fica guardado
+	•	só quem tiver a chave certa daquele instante o consegue abrir
+
+Claro que, na prática, isto depende sempre da forma como implementas o sistema.
+Mas a ideia académica é essa: prender o acesso ao ficheiro a um momento temporal.
+
+⸻
+
+Exemplo muito concreto
+
+Imagina:
+	•	email: kiko@email.com
+	•	data/hora: 2030-05-25 12:00
+
+O sistema faz algo do género:
+	1.	pega no email
+	2.	junta um segredo interno
+	3.	junta a data/hora
+	4.	calcula uma hash
+	5.	usa parte dessa hash como chave AES
+	6.	cifra o ficheiro
+	7.	calcula HMAC sobre o resultado
+	8.	guarda ou devolve o criptograma
+
+Mais tarde:
+	1.	o utilizador obtém a chave daquele instante
+	2.	envia a chave e o ficheiro cifrado
+	3.	o sistema verifica HMAC
+	4.	se estiver tudo bem, decifra
+
+⸻
+
+O papel do AES e do HMAC no trabalho
+
+AES
+
+Serve para esconder o conteúdo do ficheiro.
+
+HMAC
+
+Serve para verificar se o ficheiro foi alterado.
+
+Portanto:
+	•	AES = confidencialidade
+	•	HMAC = integridade
+
+⸻
+
+O que provavelmente te estava a escapar
+
+O trabalho não é sobre “esperar até à data e só aí desbloquear automaticamente”.
+
+É mais sobre:
+	•	gerar chaves baseadas no tempo
+	•	usar essas chaves para cifrar ficheiros
+	•	ter uma interface que mostre a chave atual
+	•	ter uma interface que permita cifrar e decifrar
+	•	proteger a integridade com HMAC
+
+Ou seja, o foco é mais criptográfico e arquitetural do que “fazer um cofre mágico real”.
+
+⸻
+
+Em resumo muito direto
+
+O teu trabalho é criar um sistema que:
+	•	gera chaves temporais
+	•	usa essas chaves para cifrar ficheiros
+	•	junta um HMAC
+	•	permite decifrar e verificar integridade
+	•	tem arquitetura cliente-servidor
+	•	e demonstra a ideia de uma cápsula do tempo criptográfica
+
+Se quiseres pensar nisto numa frase
+
+É basicamente:
+
+“um sistema web que transforma uma data/hora numa chave e usa essa chave para proteger ficheiros.”
+
+
+HMAC --> forma de confirmar que os dados não foram alterados e que foram gerados por alguém que conhece a chave secreta
+
+Porque não usar uma hash normal ? 
+Porque uma hash normal, tipo SHA-256, qualquer pessoa pode calcular. 
+
+Se usássemos só isto: 
+	-alguém alterava o ficheiro
+	-calculava uma nova hash
+	-substituia a antiga
+	-enganava o sistem
+
+Hash --> serve para criar uma espécie de impressão digital dos dados (ola e olá têm uma hash completamente diferentes)
+
+
+
+
+
+
+

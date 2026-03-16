@@ -628,11 +628,11 @@ Não fazer:
 	-aceitar qualquer formato de data sem normalização
 
 Faz isto
-	•	segredo em .env
-	•	timestamp normalizado
-	•	chaves separadas para AES e HMAC
-	•	HMAC verificado antes da decifra
-	•	mensagens de erro claras
+	-segredo em .env
+	-timestamp normalizado
+	-chaves separadas para AES e HMAC
+	-HMAC verificado antes da decifra
+	-mensagens de erro claras
 
 
 
@@ -644,6 +644,7 @@ Faz isto
 
 
 
-
+  WARNING: The scripts pip, pip3 and pip3.9 are installed in '/Users/kikopandeirada/Library/Python/3.9/bin' which is not on PATH.
+  Consider adding this directory to PATH or, if you prefer to suppress this warning, use --no-warn-script-location.
 
 
