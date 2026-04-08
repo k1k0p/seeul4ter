@@ -1,30 +1,33 @@
-from flask import Flask, render_template, request, Response
+from datetime import datetime
+import os
+
+from flask import Flask, Response, render_template, request
+
 from crypto_utils import (
+    build_encrypted_package,
+    compute_hmac_sha256,
+    decrypt_file_aes_cbc,
     derive_current_key,
     derive_future_key,
     derive_keys,
     encrypt_file_aes_cbc,
-    compute_hmac_sha256,
-    build_encrypted_package,
+    is_unlock_time_reached,
     load_encrypted_package,
     verify_hmac_sha256,
-    decrypt_file_aes_cbc,
-    is_unlock_time_reached
 )
 from db import init_db
-from models import insert_encrypted_file, get_all_encrypted_files
-from datetime import datetime
-import os
+from models import get_all_encrypted_files, insert_encrypted_file
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 app = Flask(
     __name__,
     template_folder=os.path.join(BASE_DIR, "templates"),
-    static_folder=os.path.join(BASE_DIR, "static")
+    static_folder=os.path.join(BASE_DIR, "static"),
 )
 
 init_db()
+
 
 @app.route("/", methods=["GET", "POST"])
 def index():
@@ -38,24 +41,28 @@ def index():
 
         try:
             if form_type == "current_key":
-                if email:
-                    current_result = derive_current_key(email)
+                if not email:
+                    raise ValueError("Tens de indicar um email.")
+                current_result = derive_current_key(email)
 
             elif form_type == "future_key":
                 future_datetime = request.form.get("future_datetime", "").strip()
 
-                if email and future_datetime:
-                    future_result = derive_future_key(email, future_datetime)
+                if not email or not future_datetime:
+                    raise ValueError("Tens de indicar o email e a data/hora futura.")
 
-        except Exception as e:
-            error = f"Erro: {str(e)}"
+                future_result = derive_future_key(email, future_datetime)
+
+        except Exception as exc:
+            error = f"Erro: {exc}"
 
     return render_template(
         "index.html",
         current_result=current_result,
         future_result=future_result,
-        error=error
+        error=error,
     )
+
 
 @app.route("/encrypt", methods=["GET", "POST"])
 def encrypt_page():
@@ -73,7 +80,13 @@ def encrypt_page():
             key_data = derive_future_key(email, future_datetime)
             file_bytes = uploaded_file.read()
 
-            encrypted_data = encrypt_file_aes_cbc(file_bytes, key_data["aes_key_bytes"])
+            if not file_bytes:
+                raise ValueError("O ficheiro selecionado está vazio.")
+
+            encrypted_data = encrypt_file_aes_cbc(
+                file_bytes=file_bytes,
+                key_bytes=key_data["aes_key_bytes"],
+            )
 
             hmac_tag = compute_hmac_sha256(
                 hmac_key_bytes=key_data["hmac_key_bytes"],
@@ -82,7 +95,7 @@ def encrypt_page():
                 algorithm="AES-128-CBC",
                 original_filename=uploaded_file.filename,
                 iv=encrypted_data["iv"],
-                ciphertext=encrypted_data["ciphertext"]
+                ciphertext=encrypted_data["ciphertext"],
             )
 
             encrypted_package = build_encrypted_package(
@@ -91,11 +104,10 @@ def encrypt_page():
                 original_filename=uploaded_file.filename,
                 iv=encrypted_data["iv"],
                 ciphertext=encrypted_data["ciphertext"],
-                hmac_tag=hmac_tag
+                hmac_tag=hmac_tag,
             )
 
             output_filename = f"{uploaded_file.filename}.encrypted.json"
-
             created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
             insert_encrypted_file(
@@ -105,7 +117,7 @@ def encrypt_page():
                 aes_mode="AES-128-CBC",
                 hmac_mode="HMAC-SHA256",
                 file_path=output_filename,
-                created_at=created_at
+                created_at=created_at,
             )
 
             return Response(
@@ -113,13 +125,14 @@ def encrypt_page():
                 mimetype="application/json",
                 headers={
                     "Content-Disposition": f"attachment; filename={output_filename}"
-                }
+                },
             )
 
-        except Exception as e:
-            error = f"Erro: {str(e)}"
+        except Exception as exc:
+            error = f"Erro: {exc}"
 
     return render_template("encrypt.html", error=error)
+
 
 @app.route("/decrypt", methods=["GET", "POST"])
 def decrypt_page():
@@ -137,7 +150,8 @@ def decrypt_page():
 
             if not is_unlock_time_reached(package["timestamp"]):
                 raise ValueError(
-                    f"O ficheiro só pode ser decifrado a partir de {package['timestamp']}.")
+                    f"O ficheiro só pode ser decifrado a partir de {package['timestamp']}."
+                )
 
             key_data = derive_keys(package["email"], package["timestamp"])
 
@@ -149,37 +163,53 @@ def decrypt_page():
                 original_filename=package["original_filename"],
                 iv=package["iv"],
                 ciphertext=package["ciphertext"],
-                received_hmac=package["hmac"]
+                received_hmac=package["hmac"],
             )
 
             if not hmac_valid:
-                raise ValueError("Falha na verificação de integridade: HMAC inválido.")
+                raise ValueError(
+                    "Falha na verificação de integridade: HMAC inválido."
+                )
 
-            aes_key_bytes = bytes.fromhex(key_hex)
+            try:
+                aes_key_bytes = bytes.fromhex(key_hex)
+            except ValueError as exc:
+                raise ValueError(
+                    "A chave AES tem de estar em formato hexadecimal válido."
+                ) from exc
+
+            if aes_key_bytes != key_data["aes_key_bytes"]:
+                raise ValueError(
+                    "A chave AES fornecida não corresponde ao email/data-hora do ficheiro."
+                )
 
             plaintext = decrypt_file_aes_cbc(
                 ciphertext=package["ciphertext"],
                 key_bytes=aes_key_bytes,
-                iv=package["iv"]
+                iv=package["iv"],
             )
 
             return Response(
                 plaintext,
                 mimetype="application/octet-stream",
                 headers={
-                    "Content-Disposition": f"attachment; filename={package['original_filename']}"
-                }
+                    "Content-Disposition": (
+                        f"attachment; filename={package['original_filename']}"
+                    )
+                },
             )
 
-        except Exception as e:
-            error = f"Erro: {str(e)}"
+        except Exception as exc:
+            error = f"Erro: {exc}"
 
     return render_template("decrypt.html", error=error)
+
 
 @app.route("/history")
 def history_page():
     records = get_all_encrypted_files()
     return render_template("history.html", records=records)
+
 
 if __name__ == "__main__":
     app.run(debug=True)

@@ -85,6 +85,8 @@ Caso exista sistema de autenticação, os utilizadores registados poderão consu
 6. Outras extensões
 Podem ainda ser acrescentadas outras funcionalidades consideradas relevantes ou interessantes para enriquecer o projeto.
 
+
+
 Aspeto importante para a apresentação
 
 Deve também ser pensada uma possível forma de atacar o sistema, explorando uma falha de implementação ou de desenho.

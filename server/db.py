@@ -1,6 +1,8 @@
-import sqlite3
 import os
+import sqlite3
+
 from config import DATABASE_PATH
+
 
 def get_connection():
     os.makedirs(os.path.dirname(DATABASE_PATH), exist_ok=True)
@@ -8,11 +10,13 @@ def get_connection():
     conn.row_factory = sqlite3.Row
     return conn
 
+
 def init_db():
     conn = get_connection()
     cursor = conn.cursor()
 
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS encrypted_files (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             email TEXT NOT NULL,
@@ -23,7 +27,8 @@ def init_db():
             file_path TEXT NOT NULL,
             created_at TEXT NOT NULL
         )
-    """)
+        """
+    )
 
     conn.commit()
     conn.close()

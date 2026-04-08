@@ -19,10 +19,10 @@
 }
 
 body {
-    font-family: Arial, sans-serif;
-    background: linear-gradient(180deg, #f8fbff 0%, #eef4fa 100%);
     margin: 0;
+    font-family: Arial, sans-serif;
     color: var(--text);
+    background: linear-gradient(180deg, #f8fbff 0%, #eef4fa 100%);
 }
 
 .navbar {
@@ -96,8 +96,8 @@ body {
 
 .hero p {
     margin: 0;
+    max-width: 720px;
     color: #d1d5db;
-    max-width: 700px;
     line-height: 1.55;
 }
 
@@ -121,7 +121,7 @@ body {
     font-size: 24px;
 }
 
-.card p.section-text {
+.section-text {
     margin-top: 0;
     margin-bottom: 18px;
     color: var(--muted);
@@ -129,11 +129,11 @@ body {
 }
 
 .info-box {
+    margin-top: 14px;
+    padding: 14px 16px;
     background: var(--primary-soft);
     border: 1px solid #c7d2fe;
     border-radius: 12px;
-    padding: 14px 16px;
-    margin-top: 14px;
     color: #312e81;
     font-size: 14px;
     line-height: 1.5;
@@ -146,9 +146,9 @@ form {
 }
 
 label {
-    font-weight: 700;
-    font-size: 14px;
     margin-top: 4px;
+    font-size: 14px;
+    font-weight: 700;
 }
 
 input,
@@ -156,10 +156,10 @@ select {
     width: 100%;
     padding: 12px 14px;
     font-size: 15px;
+    color: var(--text);
+    background: white;
     border: 1px solid var(--border);
     border-radius: 12px;
-    background: white;
-    color: var(--text);
 }
 
 input:focus,
@@ -174,9 +174,9 @@ button {
     padding: 13px 16px;
     font-size: 15px;
     font-weight: 700;
-    border: none;
-    background: var(--primary);
     color: white;
+    background: var(--primary);
+    border: none;
     border-radius: 12px;
     cursor: pointer;
     transition: transform 0.15s ease, opacity 0.15s ease;
@@ -208,22 +208,22 @@ button:hover {
 .error {
     margin-top: 18px;
     padding: 14px 16px;
+    color: #991b1b;
     background: var(--error-bg);
     border: 1px solid #fecaca;
     border-left: 5px solid var(--error-border);
     border-radius: 12px;
-    color: #991b1b;
     font-weight: 700;
 }
 
 .success {
     margin-top: 18px;
     padding: 14px 16px;
+    color: #166534;
     background: var(--success-bg);
     border: 1px solid #bbf7d0;
     border-left: 5px solid var(--success-border);
     border-radius: 12px;
-    color: #166534;
     font-weight: 700;
 }
 
@@ -251,6 +251,45 @@ button:hover {
     border-color: var(--primary);
 }
 
+.key-box {
+    margin-top: 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 14px;
+    background: #ffffff;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+}
+
+.key-label {
+    margin: 0 0 6px 0;
+    color: var(--muted);
+    font-size: 14px;
+}
+
+.key-value {
+    margin: 0;
+    font-family: monospace;
+    font-size: 15px;
+    line-height: 1.5;
+    word-break: break-all;
+    color: var(--text);
+}
+
+.copy-btn {
+    margin-top: 0;
+    padding: 10px 14px;
+    font-size: 14px;
+    white-space: nowrap;
+    background: #0f172a;
+}
+
+.copy-btn.copied {
+    background: #166534;
+}
+
 .table-wrapper {
     overflow-x: auto;
     margin-top: 14px;
@@ -265,10 +304,10 @@ table {
 
 th,
 td {
-    border: 1px solid var(--border);
     padding: 12px;
     text-align: left;
     vertical-align: top;
+    border: 1px solid var(--border);
 }
 
 th {
@@ -280,9 +319,9 @@ th {
 
 .footer-note {
     margin-top: 24px;
+    text-align: center;
     color: var(--muted);
     font-size: 14px;
-    text-align: center;
 }
 
 .full-width {
@@ -299,7 +338,17 @@ th {
     }
 
     .navbar-inner {
-        align-items: flex-start;
         flex-direction: column;
+        align-items: flex-start;
+    }
+}
+
+@media (max-width: 700px) {
+    .key-box {
+        flex-direction: column;
+    }
+
+    .copy-btn {
+        width: 100%;
     }
 }

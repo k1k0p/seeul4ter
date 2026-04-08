@@ -51,14 +51,23 @@
                     <button type="submit">Gerar chave atual</button>
                 </form>
 
-                {% if current_result %}
-                <div class="result">
-                    <h3>Resultado atual</h3>
-                    <p><strong>Email:</strong> {{ current_result.email }}</p>
-                    <p><strong>Timestamp:</strong> {{ current_result.timestamp }}</p>
-                    <p><strong>Chave AES-128:</strong> {{ current_result.aes_key_hex }}</p>
+        {% if current_result %}
+        <div class="result">
+            <h3>Resultado atual</h3>
+            <p><strong>Email:</strong> {{ current_result.email }}</p>
+            <p><strong>Timestamp:</strong> {{ current_result.timestamp }}</p>
+
+            <div class="key-box">
+                <div>
+                    <p class="key-label"><strong>Chave AES-128</strong></p>
+                    <p class="key-value" id="current-key">{{ current_result.aes_key_hex }}</p>
                 </div>
-                {% endif %}
+            <button type="button" class="copy-btn" onclick="copyKey('current-key', this)">
+                Copiar chave
+            </button>
+        </div>
+    </div>
+    {% endif %}
             </section>
 
             <section class="card">
