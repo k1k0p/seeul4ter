@@ -15,6 +15,7 @@
                 <a href="{{ url_for('encrypt_page') }}">Cifrar</a>
                 <a href="{{ url_for('decrypt_page') }}">Decifrar</a>
                 <a href="{{ url_for('history_page') }}">Histórico</a>
+                <a href="{{ url_for('logout') }}">Sair</a>
             </nav>
         </div>
     </header>
@@ -126,7 +127,6 @@
         </div>
         {% endif %}
 
-        <p class="footer-note">Projeto académico de Segurança Informática</p>
     </main>
 
     <script src="{{ url_for('static', filename='script.js') }}"></script>

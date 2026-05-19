@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - SEE-U-L4TER</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <header class="navbar">
+        <div class="navbar-inner">
+            <div class="brand">SEE-U-L4TER</div>
+        </div>
+    </header>
+
+    <main class="page">
+        <section class="hero">
+            <h1>Entrar</h1>
+            <p>Acede ao sistema com o teu email e password.</p>
+        </section>
+
+        <section class="grid">
+            <section class="card">
+                <h2>Login</h2>
+
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% for category, message in messages %}
+                        <div class="{{ 'success' if category == 'success' else 'error' }}">{{ message }}</div>
+                    {% endfor %}
+                {% endwith %}
+
+                <form method="POST">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" name="email" required placeholder="exemplo@email.com">
+
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" required placeholder="A tua password">
+
+                    <button type="submit">Entrar</button>
+                </form>
+
+                {% if error %}
+                <div class="error"><p>{{ error }}</p></div>
+                {% endif %}
+
+                <div class="actions" style="margin-top:16px;">
+                    <a href="{{ url_for('register_page') }}">Criar conta</a>
+                </div>
+            </section>
+        </section>
+    </main>
+</body>
+</html>

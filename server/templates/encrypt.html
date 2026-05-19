@@ -15,6 +15,7 @@
                 <a href="{{ url_for('encrypt_page') }}">Cifrar</a>
                 <a href="{{ url_for('decrypt_page') }}">Decifrar</a>
                 <a href="{{ url_for('history_page') }}">Histórico</a>
+                <a href="{{ url_for('logout') }}">Sair</a>
             </nav>
         </div>
     </header>
@@ -30,36 +31,32 @@
 
         <section class="grid">
             <section class="card">
-                <h2>Cifra AES-128-CBC</h2>
+                <h2>Configurar cifra</h2>
                 <p class="section-text">
                     O ficheiro é cifrado agora, mas a decifra só será permitida a partir do instante definido.
                 </p>
 
                 <form method="POST" enctype="multipart/form-data">
                     <label for="email">Email</label>
-                    <input
-                        type="email"
-                        id="email"
-                        name="email"
-                        required
-                        placeholder="exemplo@email.com"
-                    >
+                    <input type="email" id="email" name="email" required placeholder="exemplo@email.com">
 
                     <label for="future_datetime">Data e hora futura</label>
-                    <input
-                        type="datetime-local"
-                        id="future_datetime"
-                        name="future_datetime"
-                        required
-                    >
+                    <input type="datetime-local" id="future_datetime" name="future_datetime" required>
 
                     <label for="file">Ficheiro</label>
-                    <input
-                        type="file"
-                        id="file"
-                        name="file"
-                        required
-                    >
+                    <input type="file" id="file" name="file" required>
+
+                    <label for="aes_mode">Modo AES</label>
+                    <select id="aes_mode" name="aes_mode">
+                        <option value="AES-128-CBC">AES-128-CBC</option>
+                        <option value="AES-128-CTR">AES-128-CTR</option>
+                    </select>
+
+                    <label for="hmac_mode">Modo HMAC</label>
+                    <select id="hmac_mode" name="hmac_mode">
+                        <option value="HMAC-SHA256">HMAC-SHA256</option>
+                        <option value="HMAC-SHA512">HMAC-SHA512</option>
+                    </select>
 
                     <button type="submit">Cifrar ficheiro</button>
                 </form>
@@ -73,7 +70,14 @@
                 </p>
 
                 <div class="info-box">
-                    O ficheiro descarregado contém: timestamp, IV, ciphertext e HMAC.
+                    <strong>AES-128-CBC</strong> — cifra por blocos com IV aleatório. Requer padding PKCS7.<br><br>
+                    <strong>AES-128-CTR</strong> — cifra em modo contador (stream cipher). Sem padding, mais rápido para ficheiros grandes.<br><br>
+                    <strong>HMAC-SHA256</strong> — autenticação com hash de 256 bits.<br><br>
+                    <strong>HMAC-SHA512</strong> — autenticação com hash de 512 bits, mais seguro.
+                </div>
+
+                <div class="info-box" style="margin-top:10px;">
+                    O ficheiro descarregado contém: timestamp, modo, IV, ciphertext e HMAC.
                 </div>
 
                 <div class="actions" style="margin-top:16px;">
@@ -84,9 +88,7 @@
         </section>
 
         {% if error %}
-        <div class="error">
-            <p>{{ error }}</p>
-        </div>
+        <div class="error"><p>{{ error }}</p></div>
         {% endif %}
     </main>
 

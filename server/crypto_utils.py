@@ -55,6 +55,8 @@ def derive_future_key(email: str, timestamp_str: str) -> dict:
     return derive_keys(email, normalized_timestamp)
 
 
+# ─── AES-128-CBC ────────────────────────────────────────────────────────────
+
 def encrypt_file_aes_cbc(file_bytes: bytes, key_bytes: bytes) -> dict:
     iv = os.urandom(16)
 
@@ -65,10 +67,7 @@ def encrypt_file_aes_cbc(file_bytes: bytes, key_bytes: bytes) -> dict:
     encryptor = cipher.encryptor()
     ciphertext = encryptor.update(padded_data) + encryptor.finalize()
 
-    return {
-        "iv": iv,
-        "ciphertext": ciphertext,
-    }
+    return {"iv": iv, "ciphertext": ciphertext}
 
 
 def decrypt_file_aes_cbc(ciphertext: bytes, key_bytes: bytes, iv: bytes) -> bytes:
@@ -77,59 +76,115 @@ def decrypt_file_aes_cbc(ciphertext: bytes, key_bytes: bytes, iv: bytes) -> byte
     padded_plaintext = decryptor.update(ciphertext) + decryptor.finalize()
 
     unpadder = padding.PKCS7(128).unpadder()
-    plaintext = unpadder.update(padded_plaintext) + unpadder.finalize()
-
-    return plaintext
+    return unpadder.update(padded_plaintext) + unpadder.finalize()
 
 
-def compute_hmac_sha256(
-    hmac_key_bytes: bytes,
+# ─── AES-128-CTR ────────────────────────────────────────────────────────────
+
+def encrypt_file_aes_ctr(file_bytes: bytes, key_bytes: bytes) -> dict:
+    # nonce de 16 bytes (usado como counter inicial no CTR)
+    nonce = os.urandom(16)
+
+    cipher = Cipher(algorithms.AES(key_bytes), modes.CTR(nonce))
+    encryptor = cipher.encryptor()
+    ciphertext = encryptor.update(file_bytes) + encryptor.finalize()
+
+    return {"iv": nonce, "ciphertext": ciphertext}
+
+
+def decrypt_file_aes_ctr(ciphertext: bytes, key_bytes: bytes, iv: bytes) -> bytes:
+    cipher = Cipher(algorithms.AES(key_bytes), modes.CTR(iv))
+    decryptor = cipher.decryptor()
+    return decryptor.update(ciphertext) + decryptor.finalize()
+
+
+# ─── Funções genéricas (despacham para CBC ou CTR) ──────────────────────────
+
+def encrypt_file(file_bytes: bytes, key_bytes: bytes, aes_mode: str) -> dict:
+    if aes_mode == "AES-128-CTR":
+        return encrypt_file_aes_ctr(file_bytes, key_bytes)
+    return encrypt_file_aes_cbc(file_bytes, key_bytes)
+
+
+def decrypt_file(ciphertext: bytes, key_bytes: bytes, iv: bytes, aes_mode: str) -> bytes:
+    if aes_mode == "AES-128-CTR":
+        return decrypt_file_aes_ctr(ciphertext, key_bytes, iv)
+    return decrypt_file_aes_cbc(ciphertext, key_bytes, iv)
+
+
+# ─── HMAC ───────────────────────────────────────────────────────────────────
+
+def _build_hmac_message(
     email: str,
     timestamp: str,
     algorithm: str,
+    hmac_algorithm: str,
     original_filename: str,
     iv: bytes,
     ciphertext: bytes,
-) -> str:
-    message = (
+) -> bytes:
+    return (
         email.encode("utf-8")
         + timestamp.encode("utf-8")
         + algorithm.encode("utf-8")
+        + hmac_algorithm.encode("utf-8")
         + original_filename.encode("utf-8")
         + iv
         + ciphertext
     )
 
-    return hmac.new(hmac_key_bytes, message, hashlib.sha256).hexdigest()
 
-
-def verify_hmac_sha256(
+def compute_hmac(
     hmac_key_bytes: bytes,
     email: str,
     timestamp: str,
     algorithm: str,
+    hmac_algorithm: str,
+    original_filename: str,
+    iv: bytes,
+    ciphertext: bytes,
+) -> str:
+    message = _build_hmac_message(
+        email, timestamp, algorithm, hmac_algorithm, original_filename, iv, ciphertext
+    )
+    hash_fn = hashlib.sha512 if hmac_algorithm == "HMAC-SHA512" else hashlib.sha256
+    return hmac.new(hmac_key_bytes, message, hash_fn).hexdigest()
+
+
+def verify_hmac(
+    hmac_key_bytes: bytes,
+    email: str,
+    timestamp: str,
+    algorithm: str,
+    hmac_algorithm: str,
     original_filename: str,
     iv: bytes,
     ciphertext: bytes,
     received_hmac: str,
 ) -> bool:
-    expected_hmac = compute_hmac_sha256(
-        hmac_key_bytes=hmac_key_bytes,
-        email=email,
-        timestamp=timestamp,
-        algorithm=algorithm,
-        original_filename=original_filename,
-        iv=iv,
-        ciphertext=ciphertext,
+    expected = compute_hmac(
+        hmac_key_bytes, email, timestamp, algorithm, hmac_algorithm,
+        original_filename, iv, ciphertext,
     )
+    return hmac.compare_digest(expected, received_hmac)
 
-    return hmac.compare_digest(expected_hmac, received_hmac)
 
+# Aliases para compatibilidade com código anterior
+def compute_hmac_sha256(hmac_key_bytes, email, timestamp, algorithm, original_filename, iv, ciphertext):
+    return compute_hmac(hmac_key_bytes, email, timestamp, algorithm, "HMAC-SHA256", original_filename, iv, ciphertext)
+
+def verify_hmac_sha256(hmac_key_bytes, email, timestamp, algorithm, original_filename, iv, ciphertext, received_hmac):
+    return verify_hmac(hmac_key_bytes, email, timestamp, algorithm, "HMAC-SHA256", original_filename, iv, ciphertext, received_hmac)
+
+
+# ─── Pacote cifrado ─────────────────────────────────────────────────────────
 
 def build_encrypted_package(
     email: str,
     timestamp: str,
     original_filename: str,
+    aes_mode: str,
+    hmac_algorithm: str,
     iv: bytes,
     ciphertext: bytes,
     hmac_tag: str,
@@ -137,31 +192,31 @@ def build_encrypted_package(
     package = {
         "email": email,
         "timestamp": timestamp,
-        "algorithm": "AES-128-CBC",
-        "hmac_algorithm": "HMAC-SHA256",
+        "algorithm": aes_mode,
+        "hmac_algorithm": hmac_algorithm,
         "original_filename": original_filename,
         "iv": base64.b64encode(iv).decode("utf-8"),
         "ciphertext": base64.b64encode(ciphertext).decode("utf-8"),
         "hmac": hmac_tag,
     }
-
     return json.dumps(package, indent=4)
 
 
 def load_encrypted_package(json_bytes: bytes) -> dict:
     package = json.loads(json_bytes.decode("utf-8"))
-
     return {
         "email": package["email"],
         "timestamp": package["timestamp"],
         "algorithm": package["algorithm"],
-        "hmac_algorithm": package["hmac_algorithm"],
+        "hmac_algorithm": package.get("hmac_algorithm", "HMAC-SHA256"),
         "original_filename": package["original_filename"],
         "iv": base64.b64decode(package["iv"]),
         "ciphertext": base64.b64decode(package["ciphertext"]),
         "hmac": package["hmac"],
     }
 
+
+# ─── Tempo ──────────────────────────────────────────────────────────────────
 
 def get_current_server_time() -> datetime:
     return datetime.now()
@@ -173,5 +228,4 @@ def parse_package_timestamp(timestamp_str: str) -> datetime:
 
 def is_unlock_time_reached(timestamp_str: str) -> bool:
     target_time = parse_package_timestamp(timestamp_str)
-    current_time = get_current_server_time()
-    return current_time >= target_time
+    return datetime.now() >= target_time
