@@ -6,7 +6,6 @@
     <title>SEE-U-L4TER</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-
 <body>
     <header class="navbar">
         <div class="navbar-inner">
@@ -24,8 +23,8 @@
         <section class="hero">
             <h1>Cápsula do Tempo Criptográfica</h1>
             <p>
-            Sistema web para cifra temporal de ficheiros, com desbloqueio condicionado por data/hora,
-            derivação de chaves temporais e verificação de integridade antes da decifra.
+                Sistema web para cifra temporal de ficheiros, com desbloqueio condicionado por data/hora,
+                derivação de chaves temporais e verificação de integridade antes da decifra.
             </p>
         </section>
 
@@ -33,7 +32,7 @@
             <section class="card">
                 <h2>Chave do momento atual</h2>
                 <p class="section-text">
-                    Usa o email para gerar a chave AES correspondente à hora atual do servidor.
+                    Gera a chave AES correspondente à hora atual do servidor para o email indicado.
                 </p>
 
                 <form method="POST">
@@ -51,29 +50,30 @@
                     <button type="submit">Gerar chave atual</button>
                 </form>
 
-        {% if current_result %}
-        <div class="result">
-            <h3>Resultado atual</h3>
-            <p><strong>Email:</strong> {{ current_result.email }}</p>
-            <p><strong>Timestamp:</strong> {{ current_result.timestamp }}</p>
+                {% if current_result %}
+                <div class="result">
+                    <h3>Resultado atual</h3>
+                    <p><strong>Email:</strong> {{ current_result.email }}</p>
+                    <p><strong>Timestamp:</strong> {{ current_result.timestamp }}</p>
 
-            <div class="key-box">
-                <div>
-                    <p class="key-label"><strong>Chave AES-128</strong></p>
-                    <p class="key-value" id="current-key">{{ current_result.aes_key_hex }}</p>
+                    <div class="key-box">
+                        <div>
+                            <p class="key-label"><strong>Chave AES-128</strong></p>
+                            <p class="key-value" id="current-key">{{ current_result.aes_key_hex }}</p>
+                        </div>
+
+                        <button type="button" class="copy-btn" onclick="copyKey('current-key', this)">
+                            Copiar chave
+                        </button>
+                    </div>
                 </div>
-            <button type="button" class="copy-btn" onclick="copyKey('current-key', this)">
-                Copiar chave
-            </button>
-        </div>
-    </div>
-    {% endif %}
+                {% endif %}
             </section>
 
             <section class="card">
                 <h2>Chave para data futura</h2>
                 <p class="section-text">
-                    Gera a chave correspondente a um instante futuro específico.
+                    Gera a chave AES correspondente a uma data/hora futura específica.
                 </p>
 
                 <form method="POST">
@@ -104,7 +104,17 @@
                     <h3>Resultado futuro</h3>
                     <p><strong>Email:</strong> {{ future_result.email }}</p>
                     <p><strong>Timestamp:</strong> {{ future_result.timestamp }}</p>
-                    <p><strong>Chave AES-128:</strong> {{ future_result.aes_key_hex }}</p>
+
+                    <div class="key-box">
+                        <div>
+                            <p class="key-label"><strong>Chave AES-128</strong></p>
+                            <p class="key-value" id="future-key">{{ future_result.aes_key_hex }}</p>
+                        </div>
+
+                        <button type="button" class="copy-btn" onclick="copyKey('future-key', this)">
+                            Copiar chave
+                        </button>
+                    </div>
                 </div>
                 {% endif %}
             </section>
@@ -118,6 +128,7 @@
 
         <p class="footer-note">Projeto académico de Segurança Informática</p>
     </main>
+
     <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>

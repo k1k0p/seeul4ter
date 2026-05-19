@@ -23,7 +23,8 @@
         <section class="hero">
             <h1>Cifrar ficheiro</h1>
             <p>
-                Faz upload de um ficheiro, escolhe uma data futura e gera um pacote cifrado em JSON.
+                Faz upload de um ficheiro, associa-o a uma data/hora futura e gera imediatamente
+                um pacote cifrado em JSON protegido com HMAC.
             </p>
         </section>
 
@@ -31,18 +32,34 @@
             <section class="card">
                 <h2>Cifra AES-128-CBC</h2>
                 <p class="section-text">
-                    O ficheiro será cifrado com uma chave derivada do email, do segredo interno e da data/hora.
+                    O ficheiro é cifrado agora, mas a decifra só será permitida a partir do instante definido.
                 </p>
 
                 <form method="POST" enctype="multipart/form-data">
                     <label for="email">Email</label>
-                    <input type="email" id="email" name="email" required placeholder="exemplo@email.com">
+                    <input
+                        type="email"
+                        id="email"
+                        name="email"
+                        required
+                        placeholder="exemplo@email.com"
+                    >
 
                     <label for="future_datetime">Data e hora futura</label>
-                    <input type="datetime-local" id="future_datetime" name="future_datetime" required>
+                    <input
+                        type="datetime-local"
+                        id="future_datetime"
+                        name="future_datetime"
+                        required
+                    >
 
                     <label for="file">Ficheiro</label>
-                    <input type="file" id="file" name="file" required>
+                    <input
+                        type="file"
+                        id="file"
+                        name="file"
+                        required
+                    >
 
                     <button type="submit">Cifrar ficheiro</button>
                 </form>
@@ -51,10 +68,15 @@
             <section class="card">
                 <h2>Notas</h2>
                 <p class="section-text">
-                    O pacote gerado inclui IV, ciphertext e HMAC. A decifra só será aceite após o momento definido.
+                    O pacote gerado inclui os metadados necessários para a verificação temporal,
+                    a validação de integridade e a decifra posterior.
                 </p>
 
-                <div class="actions">
+                <div class="info-box">
+                    O ficheiro descarregado contém: timestamp, IV, ciphertext e HMAC.
+                </div>
+
+                <div class="actions" style="margin-top:16px;">
                     <a href="{{ url_for('index') }}">Voltar ao início</a>
                     <a href="{{ url_for('decrypt_page') }}">Ir para decifra</a>
                 </div>
@@ -67,6 +89,7 @@
         </div>
         {% endif %}
     </main>
+
     <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>
