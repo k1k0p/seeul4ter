@@ -1,0 +1,6 @@
+server/keys/
+.venv/
+database/*.db
+.DS_Store
+__pycache__/
+*.pyc
