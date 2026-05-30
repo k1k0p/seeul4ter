@@ -9,16 +9,21 @@ from crypto_utils import (
     compute_hmac,
     decrypt_file,
     derive_current_key,
+    derive_past_key,
     derive_future_key,
     derive_keys,
     encrypt_file,
     is_unlock_time_reached,
     load_encrypted_package,
+    sign_package,
     verify_hmac,
+    verify_signature,
 )
 from db import init_db
 from models import get_all_encrypted_files, insert_encrypted_file
-from auth import register_user, verify_user  # vamos criar este ficheiro
+from auth import register_user, verify_user
+from system_keys import ensure_system_keypair, load_private_key, load_public_key, get_public_key_pem
+from config import FLASK_SECRET_KEY
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -28,9 +33,10 @@ app = Flask(
     static_folder=os.path.join(BASE_DIR, "static"),
 )
 
-app.secret_key = "chave-secreta-da-sessao-flask"  # muda para algo mais seguro
+app.secret_key = FLASK_SECRET_KEY
 
 init_db()
+ensure_system_keypair()  # gera o par RSA do sistema na primeira execução
 
 
 # ─── Autenticação ────────────────────────────────────────────────────────────
@@ -88,7 +94,7 @@ def logout():
 @login_required
 def index():
     current_result = None
-    future_result = None
+    past_result = None
     error = None
 
     if request.method == "POST":
@@ -101,11 +107,13 @@ def index():
                     raise ValueError("Tens de indicar um email.")
                 current_result = derive_current_key(email)
 
-            elif form_type == "future_key":
-                future_datetime = request.form.get("future_datetime", "").strip()
-                if not email or not future_datetime:
-                    raise ValueError("Tens de indicar o email e a data/hora futura.")
-                future_result = derive_future_key(email, future_datetime)
+            elif form_type == "past_key":
+                # Enhancement #5: utilizadores registados acedem a chaves do
+                # PASSADO (nunca futuras). derive_past_key recusa datas futuras.
+                past_datetime = request.form.get("past_datetime", "").strip()
+                if not email or not past_datetime:
+                    raise ValueError("Tens de indicar o email e a data/hora passada.")
+                past_result = derive_past_key(email, past_datetime)
 
         except Exception as exc:
             error = f"Erro: {exc}"
@@ -113,7 +121,7 @@ def index():
     return render_template(
         "index.html",
         current_result=current_result,
-        future_result=future_result,
+        past_result=past_result,
         error=error,
     )
 
@@ -139,6 +147,7 @@ def encrypt_page():
             if not email or not future_datetime or not uploaded_file:
                 raise ValueError("Preenche o email, a data/hora e escolhe um ficheiro.")
 
+            # A chave futura é derivada apenas internamente; NUNCA é devolvida.
             key_data = derive_future_key(email, future_datetime)
             file_bytes = uploaded_file.read()
 
@@ -158,6 +167,19 @@ def encrypt_page():
                 ciphertext=encrypted_data["ciphertext"],
             )
 
+            # Assinatura digital RSA do sistema (enhancement #3).
+            signature = sign_package(
+                private_key=load_private_key(),
+                email=key_data["email"],
+                timestamp=key_data["timestamp"],
+                algorithm=aes_mode,
+                hmac_algorithm=hmac_algorithm,
+                original_filename=uploaded_file.filename,
+                iv=encrypted_data["iv"],
+                ciphertext=encrypted_data["ciphertext"],
+                hmac_tag=hmac_tag,
+            )
+
             encrypted_package = build_encrypted_package(
                 email=key_data["email"],
                 timestamp=key_data["timestamp"],
@@ -167,6 +189,7 @@ def encrypt_page():
                 iv=encrypted_data["iv"],
                 ciphertext=encrypted_data["ciphertext"],
                 hmac_tag=hmac_tag,
+                signature=signature,
             )
 
             output_filename = f"{uploaded_file.filename}.encrypted.json"
@@ -209,6 +232,7 @@ def decrypt_page():
 
             package = load_encrypted_package(uploaded_file.read())
 
+            # 1. Verificação temporal: só pode decifrar a partir da data/hora.
             if not is_unlock_time_reached(package["timestamp"]):
                 raise ValueError(
                     f"O ficheiro só pode ser decifrado a partir de {package['timestamp']}."
@@ -216,6 +240,26 @@ def decrypt_page():
 
             key_data = derive_keys(package["email"], package["timestamp"])
 
+            # 2. Assinatura digital RSA do sistema.
+            signature_valid = verify_signature(
+                public_key=load_public_key(),
+                email=package["email"],
+                timestamp=package["timestamp"],
+                algorithm=package["algorithm"],
+                hmac_algorithm=package["hmac_algorithm"],
+                original_filename=package["original_filename"],
+                iv=package["iv"],
+                ciphertext=package["ciphertext"],
+                hmac_tag=package["hmac"],
+                signature_b64=package["signature"],
+            )
+
+            if not signature_valid:
+                raise ValueError(
+                    "Falha na verificação da assinatura digital RSA do sistema."
+                )
+
+            # 3. Integridade via HMAC.
             hmac_valid = verify_hmac(
                 hmac_key_bytes=key_data["hmac_key_bytes"],
                 email=package["email"],
@@ -231,6 +275,7 @@ def decrypt_page():
             if not hmac_valid:
                 raise ValueError("Falha na verificação de integridade: HMAC inválido.")
 
+            # 4. Correspondência da chave fornecida pelo utilizador.
             try:
                 aes_key_bytes = bytes.fromhex(key_hex)
             except ValueError as exc:
@@ -267,5 +312,13 @@ def history_page():
     return render_template("history.html", records=records)
 
 
+@app.route("/public-key")
+@login_required
+def public_key_page():
+    """Disponibiliza a chave pública RSA do sistema para validação externa."""
+    return Response(get_public_key_pem(), mimetype="text/plain")
+
+
 if __name__ == "__main__":
+    # debug=True só para desenvolvimento; desligar em qualquer ambiente real.
     app.run(debug=True)

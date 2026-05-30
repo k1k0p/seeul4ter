@@ -25,7 +25,7 @@
             <h1>Cápsula do Tempo Criptográfica</h1>
             <p>
                 Sistema web para cifra temporal de ficheiros, com desbloqueio condicionado por data/hora,
-                derivação de chaves temporais e verificação de integridade antes da decifra.
+                derivação de chaves temporais e verificação de integridade e autenticidade antes da decifra.
             </p>
         </section>
 
@@ -72,47 +72,53 @@
             </section>
 
             <section class="card">
-                <h2>Chave para data futura</h2>
+                <h2>Chave para data passada</h2>
                 <p class="section-text">
-                    Gera a chave AES correspondente a uma data/hora futura específica.
+                    Utilizadores registados podem recuperar a chave AES de qualquer data/hora
+                    <strong>já decorrida</strong>. Chaves de datas futuras nunca são reveladas — é isso
+                    que mantém as cápsulas fechadas até ao momento certo.
                 </p>
 
                 <form method="POST">
-                    <input type="hidden" name="form_type" value="future_key">
+                    <input type="hidden" name="form_type" value="past_key">
 
-                    <label for="email_future">Email</label>
+                    <label for="email_past">Email</label>
                     <input
                         type="email"
-                        id="email_future"
+                        id="email_past"
                         name="email"
                         required
                         placeholder="exemplo@email.com"
                     >
 
-                    <label for="future_datetime">Data e hora futura</label>
+                    <label for="past_datetime">Data e hora passada</label>
                     <input
                         type="datetime-local"
-                        id="future_datetime"
-                        name="future_datetime"
+                        id="past_datetime"
+                        name="past_datetime"
                         required
                     >
 
-                    <button type="submit">Gerar chave futura</button>
+                    <button type="submit">Gerar chave passada</button>
                 </form>
 
-                {% if future_result %}
+                <div class="info-box" style="margin-top:14px;">
+                    O sistema recusa qualquer pedido de chave para uma data futura.
+                </div>
+
+                {% if past_result %}
                 <div class="result">
-                    <h3>Resultado futuro</h3>
-                    <p><strong>Email:</strong> {{ future_result.email }}</p>
-                    <p><strong>Timestamp:</strong> {{ future_result.timestamp }}</p>
+                    <h3>Resultado passado</h3>
+                    <p><strong>Email:</strong> {{ past_result.email }}</p>
+                    <p><strong>Timestamp:</strong> {{ past_result.timestamp }}</p>
 
                     <div class="key-box">
                         <div>
                             <p class="key-label"><strong>Chave AES-128</strong></p>
-                            <p class="key-value" id="future-key">{{ future_result.aes_key_hex }}</p>
+                            <p class="key-value" id="past-key">{{ past_result.aes_key_hex }}</p>
                         </div>
 
-                        <button type="button" class="copy-btn" onclick="copyKey('future-key', this)">
+                        <button type="button" class="copy-btn" onclick="copyKey('past-key', this)">
                             Copiar chave
                         </button>
                     </div>

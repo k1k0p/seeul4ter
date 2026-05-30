@@ -5,10 +5,14 @@ import json
 import os
 from datetime import datetime
 
-from cryptography.hazmat.primitives import padding
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives import hashes, padding, serialization
+from cryptography.hazmat.primitives.asymmetric import padding as asym_padding
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 from config import SYSTEM_SECRET
+
+SIGNATURE_ALGORITHM = "RSA-PSS-SHA256"
 
 
 def normalize_email(email: str) -> str:
@@ -51,7 +55,32 @@ def derive_current_key(email: str) -> dict:
 
 
 def derive_future_key(email: str, timestamp_str: str) -> dict:
+    """Deriva a chave para um instante futuro.
+
+    ATENÇÃO: é usada apenas internamente pelo servidor no momento da cifra.
+    A chave NUNCA deve ser devolvida ao utilizador para datas futuras — caso
+    contrário a "cápsula do tempo" deixa de ter sentido (qualquer pessoa
+    decifraria o ficheiro offline antes do tempo).
+    """
     normalized_timestamp = normalize_timestamp(timestamp_str)
+    return derive_keys(email, normalized_timestamp)
+
+
+def derive_past_key(email: str, timestamp_str: str) -> dict:
+    """Deriva a chave para um instante do passado (ou para a hora atual).
+
+    Recusa explicitamente timestamps futuros. É esta a função exposta a
+    utilizadores registados (enhancement #5): podem aceder a qualquer chave
+    do passado, mas nunca a chaves futuras.
+    """
+    normalized_timestamp = normalize_timestamp(timestamp_str)
+    target = datetime.strptime(normalized_timestamp, "%Y-%m-%d %H:%M:%S")
+
+    if target > datetime.now():
+        raise ValueError(
+            "Só é possível obter chaves do passado ou do momento atual, nunca futuras."
+        )
+
     return derive_keys(email, normalized_timestamp)
 
 
@@ -177,6 +206,91 @@ def verify_hmac_sha256(hmac_key_bytes, email, timestamp, algorithm, original_fil
     return verify_hmac(hmac_key_bytes, email, timestamp, algorithm, "HMAC-SHA256", original_filename, iv, ciphertext, received_hmac)
 
 
+# ─── Assinatura digital RSA (chave do sistema) ───────────────────────────────
+
+def _build_signature_message(
+    email: str,
+    timestamp: str,
+    algorithm: str,
+    hmac_algorithm: str,
+    original_filename: str,
+    iv: bytes,
+    ciphertext: bytes,
+    hmac_tag: str,
+) -> bytes:
+    """Mensagem canónica assinada pelo sistema.
+
+    Reutiliza a mensagem do HMAC e concatena ainda a própria tag HMAC, de forma
+    a que a assinatura cubra todos os metadados, o criptograma E o HMAC.
+    """
+    return (
+        _build_hmac_message(
+            email, timestamp, algorithm, hmac_algorithm, original_filename, iv, ciphertext
+        )
+        + hmac_tag.encode("utf-8")
+    )
+
+
+def sign_package(
+    private_key,
+    email: str,
+    timestamp: str,
+    algorithm: str,
+    hmac_algorithm: str,
+    original_filename: str,
+    iv: bytes,
+    ciphertext: bytes,
+    hmac_tag: str,
+) -> str:
+    """Assina o pacote com a chave privada RSA do sistema (RSA-PSS + SHA256)."""
+    message = _build_signature_message(
+        email, timestamp, algorithm, hmac_algorithm, original_filename, iv, ciphertext, hmac_tag
+    )
+    signature = private_key.sign(
+        message,
+        asym_padding.PSS(
+            mgf=asym_padding.MGF1(hashes.SHA256()),
+            salt_length=asym_padding.PSS.MAX_LENGTH,
+        ),
+        hashes.SHA256(),
+    )
+    return base64.b64encode(signature).decode("utf-8")
+
+
+def verify_signature(
+    public_key,
+    email: str,
+    timestamp: str,
+    algorithm: str,
+    hmac_algorithm: str,
+    original_filename: str,
+    iv: bytes,
+    ciphertext: bytes,
+    hmac_tag: str,
+    signature_b64: str,
+) -> bool:
+    """Verifica a assinatura RSA do sistema. Devolve True/False."""
+    if not signature_b64:
+        return False
+
+    message = _build_signature_message(
+        email, timestamp, algorithm, hmac_algorithm, original_filename, iv, ciphertext, hmac_tag
+    )
+    try:
+        public_key.verify(
+            base64.b64decode(signature_b64),
+            message,
+            asym_padding.PSS(
+                mgf=asym_padding.MGF1(hashes.SHA256()),
+                salt_length=asym_padding.PSS.MAX_LENGTH,
+            ),
+            hashes.SHA256(),
+        )
+        return True
+    except (InvalidSignature, ValueError):
+        return False
+
+
 # ─── Pacote cifrado ─────────────────────────────────────────────────────────
 
 def build_encrypted_package(
@@ -188,6 +302,8 @@ def build_encrypted_package(
     iv: bytes,
     ciphertext: bytes,
     hmac_tag: str,
+    signature: str = "",
+    signature_algorithm: str = SIGNATURE_ALGORITHM,
 ) -> str:
     package = {
         "email": email,
@@ -198,6 +314,8 @@ def build_encrypted_package(
         "iv": base64.b64encode(iv).decode("utf-8"),
         "ciphertext": base64.b64encode(ciphertext).decode("utf-8"),
         "hmac": hmac_tag,
+        "signature": signature,
+        "signature_algorithm": signature_algorithm,
     }
     return json.dumps(package, indent=4)
 
@@ -213,6 +331,8 @@ def load_encrypted_package(json_bytes: bytes) -> dict:
         "iv": base64.b64decode(package["iv"]),
         "ciphertext": base64.b64decode(package["ciphertext"]),
         "hmac": package["hmac"],
+        "signature": package.get("signature", ""),
+        "signature_algorithm": package.get("signature_algorithm", SIGNATURE_ALGORITHM),
     }
 
 
