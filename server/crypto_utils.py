@@ -21,12 +21,12 @@ def normalize_email(email: str) -> str:
 
 def get_current_hour_timestamp() -> str:
     now = datetime.now()
-    return now.strftime("%Y-%m-%d %H:00:00")
+    return now.strftime("%Y-%m-%d %H:%M:00")   
 
 
 def normalize_timestamp(timestamp_str: str) -> str:
     dt = datetime.strptime(timestamp_str, "%Y-%m-%dT%H:%M")
-    return dt.strftime("%Y-%m-%d %H:00:00")
+    return dt.strftime("%Y-%m-%d %H:%M:00")     
 
 
 def derive_keys(email: str, timestamp: str) -> dict:

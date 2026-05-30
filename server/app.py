@@ -320,5 +320,4 @@ def public_key_page():
 
 
 if __name__ == "__main__":
-    # debug=True só para desenvolvimento; desligar em qualquer ambiente real.
-    app.run(debug=True)
+    app.run(debug=True, ssl_context=("ssl_cert.pem", "ssl_key.pem"))
