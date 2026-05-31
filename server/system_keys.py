@@ -1,14 +1,3 @@
-"""Gestão do par de chaves RSA do sistema.
-
-O sistema usa um único par de chaves RSA (a chave do "administrador do sistema",
-como sugerido na proposta) para assinar digitalmente cada pacote cifrado.
-
-- A chave privada é gerada na primeira execução e guardada cifrada em disco
-  (PEM protegido por passphrase).
-- A chave pública é guardada em PEM e pode ser distribuída para validação
-  externa (e.g., com openssl).
-"""
-
 import os
 from functools import lru_cache
 
@@ -25,10 +14,10 @@ from config import (
 
 
 def ensure_system_keypair() -> None:
-    """Garante que o par de chaves RSA do sistema existe em disco.
-
-    Gera-o na primeira execução, se ainda não existir. A chave privada fica
-    cifrada com a passphrase definida na configuração.
+    """
+    Garante que o par de chaves RSA do sistema existe em disco.
+    Gera um novo par caso não existam ficheiros nos caminhos configurados,
+    protegendo a chave privada com a passphrase configurada.
     """
     os.makedirs(KEYS_DIR, exist_ok=True)
 
@@ -60,7 +49,11 @@ def ensure_system_keypair() -> None:
 
 @lru_cache(maxsize=1)
 def load_private_key():
-    """Carrega (e mantém em cache) a chave privada RSA do sistema."""
+    """
+    Carrega a chave privada RSA do sistema a partir do disco.
+    Utiliza lru_cache para evitar leituras repetidas do ficheiro.
+    @return: Objeto de chave privada carregado.
+    """
     with open(RSA_PRIVATE_KEY_PATH, "rb") as f:
         return serialization.load_pem_private_key(
             f.read(),
@@ -70,12 +63,19 @@ def load_private_key():
 
 @lru_cache(maxsize=1)
 def load_public_key():
-    """Carrega (e mantém em cache) a chave pública RSA do sistema."""
+    """
+    Carrega a chave pública RSA do sistema a partir do disco.
+    Utiliza lru_cache para eficiência.
+    @return: Objeto de chave pública carregado.
+    """
     with open(RSA_PUBLIC_KEY_PATH, "rb") as f:
         return serialization.load_pem_public_key(f.read())
 
 
 def get_public_key_pem() -> str:
-    """Devolve a chave pública do sistema em PEM (para mostrar/distribuir)."""
+    """
+    Lê e devolve o conteúdo da chave pública em formato PEM.
+    @return: String contendo a chave pública.
+    """
     with open(RSA_PUBLIC_KEY_PATH, "r", encoding="utf-8") as f:
         return f.read()

@@ -42,6 +42,11 @@ ensure_system_keypair()  # gera o par RSA do sistema na primeira execução
 # ─── Autenticação ────────────────────────────────────────────────────────────
 
 def login_required(f):
+    """
+    Decorador para restringir o acesso a rotas apenas a utilizadores autenticados.
+    @param f: A função da rota a ser decorada.
+    @return: A função decorada que redireciona para o login se necessário.
+    """
     @functools.wraps(f)
     def decorated(*args, **kwargs):
         if "user_email" not in session:
@@ -52,6 +57,10 @@ def login_required(f):
 
 @app.route("/register", methods=["GET", "POST"])
 def register_page():
+    """
+    Processa o registo de novos utilizadores.
+    @return: Renderiza o template de registo com mensagens de erro ou sucesso.
+    """
     error = None
     if request.method == "POST":
         email = request.form.get("email", "").strip().lower()
@@ -70,6 +79,10 @@ def register_page():
 
 @app.route("/login", methods=["GET", "POST"])
 def login_page():
+    """
+    Processa a autenticação do utilizador.
+    @return: Redireciona para o índice se o login for bem-sucedido.
+    """
     error = None
     if request.method == "POST":
         email = request.form.get("email", "").strip().lower()
@@ -84,6 +97,10 @@ def login_page():
 
 @app.route("/logout")
 def logout():
+    """
+    Termina a sessão do utilizador atual.
+    @return: Redireciona para a página inicial.
+    """
     session.clear()
     return redirect(url_for("index"))
 
@@ -92,6 +109,10 @@ def logout():
 
 @app.route("/", methods=["GET", "POST"])
 def index():
+    """
+    Página principal que gere a derivação de chaves atuais e passadas.
+    @return: Renderiza o template inicial com resultados de chaves.
+    """
     current_result = None
     past_result = None
     logged_in = "user_email" in session
@@ -149,6 +170,10 @@ def index():
 @app.route("/encrypt", methods=["GET", "POST"])
 @login_required
 def encrypt_page():
+    """
+    Processa a cifra de ficheiros com chaves derivadas do futuro.
+    @return: Response contendo o ficheiro cifrado (download).
+    """
     error = None
 
     if request.method == "POST":
@@ -167,7 +192,6 @@ def encrypt_page():
             if not email or not future_datetime or not uploaded_file:
                 raise ValueError("Preenche o email, a data/hora e escolhe um ficheiro.")
 
-            # A chave futura é derivada apenas internamente; NUNCA é devolvida.
             key_data = derive_future_key(email, future_datetime)
             file_bytes = uploaded_file.read()
 
@@ -187,7 +211,6 @@ def encrypt_page():
                 ciphertext=encrypted_data["ciphertext"],
             )
 
-            # Assinatura digital RSA do sistema (enhancement #3).
             signature = sign_package(
                 private_key=load_private_key(),
                 email=key_data["email"],
@@ -240,6 +263,10 @@ def encrypt_page():
 @app.route("/decrypt", methods=["GET", "POST"])
 @login_required
 def decrypt_page():
+    """
+    Processa a decifra de ficheiros após validação de data, assinatura e integridade.
+    @return: Response contendo o ficheiro decifrado (download).
+    """
     error = None
 
     if request.method == "POST":
@@ -252,7 +279,6 @@ def decrypt_page():
 
             package = load_encrypted_package(uploaded_file.read())
 
-            # 1. Verificação temporal: só pode decifrar a partir da data/hora.
             if not is_unlock_time_reached(package["timestamp"]):
                 raise ValueError(
                     f"O ficheiro só pode ser decifrado a partir de {package['timestamp']}."
@@ -260,7 +286,6 @@ def decrypt_page():
 
             key_data = derive_keys(package["email"], package["timestamp"])
 
-            # 2. Assinatura digital RSA do sistema.
             signature_valid = verify_signature(
                 public_key=load_public_key(),
                 email=package["email"],
@@ -279,7 +304,6 @@ def decrypt_page():
                     "Falha na verificação da assinatura digital RSA do sistema."
                 )
 
-            # 3. Integridade via HMAC.
             hmac_valid = verify_hmac(
                 hmac_key_bytes=key_data["hmac_key_bytes"],
                 email=package["email"],
@@ -295,7 +319,6 @@ def decrypt_page():
             if not hmac_valid:
                 raise ValueError("Falha na verificação de integridade: HMAC inválido.")
 
-            # 4. Correspondência da chave fornecida pelo utilizador.
             try:
                 aes_key_bytes = bytes.fromhex(key_hex)
             except ValueError as exc:
@@ -328,6 +351,10 @@ def decrypt_page():
 @app.route("/history")
 @login_required
 def history_page():
+    """
+    Lista o histórico de ficheiros cifrados do utilizador.
+    @return: Renderiza o template de histórico.
+    """
     records = get_encrypted_files_by_email(session["user_email"])
     return render_template("history.html", records=records)
 
@@ -335,7 +362,10 @@ def history_page():
 @app.route("/public-key")
 @login_required
 def public_key_page():
-    """Disponibiliza a chave pública RSA do sistema para validação externa."""
+    """
+    Disponibiliza a chave pública RSA do sistema para validação externa.
+    @return: Response contendo a chave pública em formato PEM.
+    """
     return Response(get_public_key_pem(), mimetype="text/plain")
 
 

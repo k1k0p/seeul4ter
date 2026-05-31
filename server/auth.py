@@ -4,6 +4,10 @@ from db import get_connection
 
 
 def init_users_table():
+    """
+    Inicializa a tabela de utilizadores na base de dados, caso não exista.
+    Cria os campos necessários para armazenamento seguro de credenciais.
+    """
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute(
@@ -22,10 +26,22 @@ def init_users_table():
 
 
 def _hash_password(password: str, salt: str) -> str:
+    """
+    Calcula o hash SHA-256 de uma palavra-passe utilizando um salt para maior segurança.
+    @param password: A palavra-passe em texto simples.
+    @param salt: A string de salt aleatória.
+    @return: A representação hexadecimal do hash final.
+    """
     return hashlib.sha256((salt + password).encode("utf-8")).hexdigest()
 
 
 def register_user(email: str, password: str) -> tuple[bool, str]:
+    """
+    Regista um novo utilizador na base de dados após verificar se o email já existe.
+    @param email: O email do utilizador.
+    @param password: A palavra-passe a ser protegida.
+    @return: Um tuple com (sucesso, mensagem).
+    """
     init_users_table()
     conn = get_connection()
     cursor = conn.cursor()
@@ -51,6 +67,12 @@ def register_user(email: str, password: str) -> tuple[bool, str]:
 
 
 def verify_user(email: str, password: str) -> bool:
+    """
+    Verifica se as credenciais fornecidas são válidas, comparando o hash calculado com o armazenado.
+    @param email: O email do utilizador.
+    @param password: A palavra-passe a verificar.
+    @return: True se as credenciais estiverem corretas, False caso contrário.
+    """
     init_users_table()
     conn = get_connection()
     cursor = conn.cursor()

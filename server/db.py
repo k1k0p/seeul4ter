@@ -5,6 +5,11 @@ from config import DATABASE_PATH
 
 
 def get_connection():
+    """
+    Estabelece uma ligação à base de dados SQLite.
+    Garante que o diretório da base de dados existe antes de conectar.
+    @return: Objeto de conexão sqlite3 configurado com row_factory.
+    """
     os.makedirs(os.path.dirname(DATABASE_PATH), exist_ok=True)
     conn = sqlite3.connect(DATABASE_PATH)
     conn.row_factory = sqlite3.Row
@@ -12,6 +17,10 @@ def get_connection():
 
 
 def init_db():
+    """
+    Inicializa a estrutura da base de dados, criando as tabelas necessárias
+    para o registo de ficheiros cifrados e gestão de utilizadores.
+    """
     conn = get_connection()
     cursor = conn.cursor()
 
