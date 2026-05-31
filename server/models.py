@@ -52,3 +52,14 @@ def get_all_encrypted_files():
     conn.close()
 
     return rows
+
+def get_encrypted_files_by_email(email):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT * FROM encrypted_files WHERE email = ? ORDER BY id DESC",
+        (email,),
+    )
+    rows = cursor.fetchall()
+    conn.close()
+    return rows

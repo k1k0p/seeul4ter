@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 import functools
 
@@ -20,7 +20,7 @@ from crypto_utils import (
     verify_signature,
 )
 from db import init_db
-from models import get_all_encrypted_files, insert_encrypted_file
+from models import get_all_encrypted_files, insert_encrypted_file, get_encrypted_files_by_email
 from auth import register_user, verify_user
 from system_keys import ensure_system_keypair, load_private_key, load_public_key, get_public_key_pem
 from config import FLASK_SECRET_KEY
@@ -85,17 +85,16 @@ def login_page():
 @app.route("/logout")
 def logout():
     session.clear()
-    return redirect(url_for("login_page"))
+    return redirect(url_for("index"))
 
 
 # ─── Páginas principais ──────────────────────────────────────────────────────
 
 @app.route("/", methods=["GET", "POST"])
-@login_required
 def index():
     current_result = None
     past_result = None
-    error = None
+    logged_in = "user_email" in session
 
     if request.method == "POST":
         form_type = request.form.get("form_type")
@@ -106,23 +105,44 @@ def index():
                 if not email:
                     raise ValueError("Tens de indicar um email.")
                 current_result = derive_current_key(email)
+                dt = datetime.strptime(current_result["timestamp"], "%Y-%m-%d %H:%M:%S")
+                expires = dt + timedelta(minutes=1)
+                current_result["period"] = f"{dt.strftime('%H:%M')} – {expires.strftime('%H:%M')}"
+                current_result["expires_at"] = expires.strftime("%Y-%m-%dT%H:%M:%S")
+                current_result["email"] = email
+                session["last_current_result"] = current_result
 
             elif form_type == "past_key":
-                # Enhancement #5: utilizadores registados acedem a chaves do
-                # PASSADO (nunca futuras). derive_past_key recusa datas futuras.
+                if not logged_in:
+                    raise ValueError("Tens de fazer login para aceder a chaves do passado.")
                 past_datetime = request.form.get("past_datetime", "").strip()
                 if not email or not past_datetime:
                     raise ValueError("Tens de indicar o email e a data/hora passada.")
                 past_result = derive_past_key(email, past_datetime)
+                session["last_past_result"] = past_result
 
         except Exception as exc:
-            error = f"Erro: {exc}"
+            flash(f"Erro: {exc}", "error")
 
+        return redirect(url_for("index"))
+
+    else:
+        last = session.get("last_current_result")
+        if last:
+            expires = datetime.strptime(last["expires_at"], "%Y-%m-%dT%H:%M:%S")
+            if datetime.now() < expires:
+                current_result = last
+            else:
+                session.pop("last_current_result", None)
+        past_result = session.get("last_past_result") if logged_in else None
+
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     return render_template(
         "index.html",
         current_result=current_result,
         past_result=past_result,
-        error=error,
+        logged_in=logged_in,
+        now=now,
     )
 
 
@@ -308,7 +328,7 @@ def decrypt_page():
 @app.route("/history")
 @login_required
 def history_page():
-    records = get_all_encrypted_files()
+    records = get_encrypted_files_by_email(session["user_email"])
     return render_template("history.html", records=records)
 
 
@@ -320,4 +340,4 @@ def public_key_page():
 
 
 if __name__ == "__main__":
-    app.run(debug=True, ssl_context=("ssl_cert.pem", "ssl_key.pem"))
+    app.run(debug=True, port=5001, ssl_context=("ssl_cert.pem", "ssl_key.pem"))

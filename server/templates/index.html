@@ -5,6 +5,101 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SEE-U-L4TER</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .clock-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 14px;
+            padding: 8px 14px;
+            background: rgba(255,255,255,0.12);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 999px;
+            font-size: 13px;
+            color: #e5e7eb;
+            letter-spacing: 0.3px;
+        }
+        .clock-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #4ade80;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+        .locked-card {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 24px 16px;
+            gap: 12px;
+        }
+        .lock-icon {
+            font-size: 36px;
+            line-height: 1;
+        }
+        .locked-card h3 {
+            margin: 0;
+            font-size: 17px;
+            color: var(--text);
+        }
+        .locked-card p {
+            margin: 0;
+            color: var(--muted);
+            font-size: 14px;
+            line-height: 1.55;
+            max-width: 280px;
+        }
+        .locked-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 6px;
+        }
+        .btn-primary {
+            padding: 10px 20px;
+            font-size: 14px;
+            font-weight: 700;
+            color: white;
+            background: var(--primary);
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            text-decoration: none;
+            transition: opacity 0.15s;
+        }
+        .btn-primary:hover { opacity: 0.85; }
+        .btn-outline {
+            padding: 10px 20px;
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--text);
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            cursor: pointer;
+            text-decoration: none;
+            transition: 0.15s;
+        }
+        .btn-outline:hover {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+        .key-period {
+            margin: 0 0 16px 0;
+            font-size: 13px;
+            color: var(--muted);
+        }
+        .key-period span {
+            font-weight: 700;
+            color: var(--text);
+        }
+    </style>
 </head>
 <body>
     <header class="navbar">
@@ -12,10 +107,15 @@
             <div class="brand">SEE-U-L4TER</div>
             <nav class="nav-links">
                 <a href="{{ url_for('index') }}">Início</a>
+                {% if logged_in %}
                 <a href="{{ url_for('encrypt_page') }}">Cifrar</a>
                 <a href="{{ url_for('decrypt_page') }}">Decifrar</a>
                 <a href="{{ url_for('history_page') }}">Histórico</a>
                 <a href="{{ url_for('logout') }}">Sair</a>
+                {% else %}
+                <a href="{{ url_for('login_page') }}">Login</a>
+                <a href="{{ url_for('register_page') }}">Registar</a>
+                {% endif %}
             </nav>
         </div>
     </header>
@@ -24,16 +124,41 @@
         <section class="hero">
             <h1>Cápsula do Tempo Criptográfica</h1>
             <p>
-                Sistema web para cifra temporal de ficheiros, com desbloqueio condicionado por data/hora,
-                derivação de chaves temporais e verificação de integridade e autenticidade antes da decifra.
+                Cifra ficheiros que só podem ser abertos numa data e hora específica.
+                A chave de decifra só é revelada no momento certo — nunca antes, nunca depois.
             </p>
+            <div class="clock-badge">
+                <span class="clock-dot"></span>
+                Hora do servidor: <strong id="live-clock">{{ now }}</strong>
+            </div>
+            <script>
+                (function () {
+                    var base = new Date("{{ now }}".replace(" ", "T"));
+                    var loaded = Date.now();
+                    function tick() {
+                        var elapsed = Date.now() - loaded;
+                        var d = new Date(base.getTime() + elapsed);
+                        var pad = function(n){ return String(n).padStart(2,"0"); };
+                        document.getElementById("live-clock").textContent =
+                            d.getFullYear() + "-" +
+                            pad(d.getMonth()+1) + "-" +
+                            pad(d.getDate()) + " " +
+                            pad(d.getHours()) + ":" +
+                            pad(d.getMinutes()) + ":" +
+                            pad(d.getSeconds());
+                    }
+                    tick();
+                    setInterval(tick, 1000);
+                })();
+            </script>
         </section>
 
         <section class="grid">
             <section class="card">
                 <h2>Chave do momento atual</h2>
                 <p class="section-text">
-                    Gera a chave AES correspondente à hora atual do servidor para o email indicado.
+                    Chave AES válida para a hora atual. Usa-a para decifrar qualquer cápsula
+                    criada com este email para este período de tempo.
                 </p>
 
                 <form method="POST">
@@ -48,35 +173,51 @@
                         placeholder="exemplo@email.com"
                     >
 
-                    <button type="submit">Gerar chave atual</button>
+                    <button type="submit">Obter chave atual</button>
                 </form>
 
                 {% if current_result %}
-                <div class="result">
-                    <h3>Resultado atual</h3>
-                    <p><strong>Email:</strong> {{ current_result.email }}</p>
-                    <p><strong>Timestamp:</strong> {{ current_result.timestamp }}</p>
-
+                <div class="result" id="current-key-card">
+                    <p class="key-period">
+                        Email: <span>{{ current_result.email }}</span>
+                    </p>
+                    <p class="key-period">
+                        Válida para o período <span>{{ current_result.period }}</span>
+                    </p>
                     <div class="key-box">
                         <div>
                             <p class="key-label"><strong>Chave AES-128</strong></p>
                             <p class="key-value" id="current-key">{{ current_result.aes_key_hex }}</p>
                         </div>
-
                         <button type="button" class="copy-btn" onclick="copyKey('current-key', this)">
-                            Copiar chave
+                            Copiar
                         </button>
                     </div>
                 </div>
+                <script>
+                    (function () {
+                        var expires = new Date("{{ current_result.expires_at }}");
+                        var serverOffset = new Date("{{ now }}".replace(" ", "T")) - Date.now();
+                        var msLeft = expires - (Date.now() + serverOffset);
+                        if (msLeft > 0) {
+                            setTimeout(function () {
+                                var card = document.getElementById("current-key-card");
+                                if (card) {
+                                    card.innerHTML = '<p style="color:var(--muted);font-size:14px;">A chave expirou. Submete o formulário para gerar uma nova chave.</p>';
+                                }
+                            }, msLeft);
+                        }
+                    })();
+                </script>
                 {% endif %}
             </section>
 
             <section class="card">
                 <h2>Chave para data passada</h2>
+                {% if logged_in %}
                 <p class="section-text">
-                    Utilizadores registados podem recuperar a chave AES de qualquer data/hora
-                    <strong>já decorrida</strong>. Chaves de datas futuras nunca são reveladas — é isso
-                    que mantém as cápsulas fechadas até ao momento certo.
+                    Recupera a chave AES de qualquer data/hora <strong>já decorrida</strong>.
+                    Chaves futuras nunca são reveladas.
                 </p>
 
                 <form method="POST">
@@ -99,39 +240,54 @@
                         required
                     >
 
-                    <button type="submit">Gerar chave passada</button>
+                    <button type="submit">Obter chave passada</button>
                 </form>
 
                 <div class="info-box" style="margin-top:14px;">
-                    O sistema recusa qualquer pedido de chave para uma data futura.
+                    Chaves de datas futuras são sempre recusadas.
                 </div>
 
                 {% if past_result %}
                 <div class="result">
-                    <h3>Resultado passado</h3>
-                    <p><strong>Email:</strong> {{ past_result.email }}</p>
-                    <p><strong>Timestamp:</strong> {{ past_result.timestamp }}</p>
-
+                    <p class="key-period">
+                        Chave para <span>{{ past_result.timestamp[:13] }}h</span>
+                    </p>
                     <div class="key-box">
                         <div>
                             <p class="key-label"><strong>Chave AES-128</strong></p>
                             <p class="key-value" id="past-key">{{ past_result.aes_key_hex }}</p>
                         </div>
-
                         <button type="button" class="copy-btn" onclick="copyKey('past-key', this)">
-                            Copiar chave
+                            Copiar
                         </button>
+                    </div>
+                </div>
+                {% endif %}
+
+                {% else %}
+                <div class="locked-card">
+                    <div class="lock-icon">&#128274;</div>
+                    <h3>Funcionalidade exclusiva</h3>
+                    <p>
+                        Utilizadores registados podem aceder a chaves de qualquer data passada
+                        para decifrar cápsulas antigas.
+                    </p>
+                    <div class="locked-actions">
+                        <a href="{{ url_for('login_page') }}" class="btn-primary">Fazer login</a>
+                        <a href="{{ url_for('register_page') }}" class="btn-outline">Criar conta</a>
                     </div>
                 </div>
                 {% endif %}
             </section>
         </section>
 
-        {% if error %}
-        <div class="error">
-            <p>{{ error }}</p>
-        </div>
-        {% endif %}
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %}
+            <div class="{{ 'success' if category == 'success' else 'error' }}">
+                <p>{{ message }}</p>
+            </div>
+            {% endfor %}
+        {% endwith %}
 
     </main>
 
