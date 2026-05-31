@@ -1,3 +1,17 @@
+"""
+Núcleo criptográfico do SEE-U-L4TER.
+
+Reúne toda a lógica de criptografia do sistema:
+
+- Derivação determinística de chaves AES e HMAC a partir de (email, data-hora,
+  segredo do servidor). Como a chave depende da data-hora, o instante de
+  desbloqueio fica criptograficamente ligado à própria chave.
+- Cifra/decifra simétrica com AES-128 em modo CBC ou CTR.
+- Integridade e autenticidade via HMAC (Encrypt-then-MAC).
+- Assinatura digital RSA do sistema (RSA-PSS + SHA-256).
+- Serialização do pacote cifrado em JSON e verificação temporal.
+"""
+
 import base64
 import hashlib
 import hmac
@@ -16,46 +30,82 @@ SIGNATURE_ALGORITHM = "RSA-PSS-SHA256"
 
 
 def normalize_email(email: str) -> str:
-    """
-    Normaliza o email removendo espaços em branco e convertendo para minúsculas.
-    @param email: O email fornecido pelo utilizador.
-    @return: O email normalizado.
+    """Normaliza o email (remove espaços e passa a minúsculas).
+
+    É essencial que a normalização seja idêntica em todo o lado: como o email
+    entra na derivação da chave, "A@x.com" e "a@x.com " têm de produzir a mesma
+    chave, senão um ficheiro cifrado nunca mais seria decifrável.
+
+    Args:
+        email: o email fornecido pelo utilizador.
+
+    Returns:
+        O email normalizado.
     """
     return email.strip().lower()
 
 
 def get_current_hour_timestamp() -> str:
-    """
-    Obtém o timestamp atual formatado até à hora, com minutos a zero.
-    @return: String de timestamp no formato 'YYYY-MM-DD HH:MM:00'.
+    """Devolve o timestamp do minuto atual, com segundos a zero.
+
+    A granularidade é ao minuto (HH:MM:00): a chave do momento atual é válida
+    durante o minuto corrente. Os segundos são fixados a zero para que todas as
+    derivações dentro do mesmo minuto produzam a mesma chave.
+
+    Returns:
+        String no formato 'YYYY-MM-DD HH:MM:00'.
     """
     now = datetime.now()
-    return now.strftime("%Y-%m-%d %H:%M:00")   
+    return now.strftime("%Y-%m-%d %H:%M:00")
 
 
 def normalize_timestamp(timestamp_str: str) -> str:
-    """
-    Converte um timestamp de input (datetime-local) para o formato canónico do sistema.
-    @param timestamp_str: String de data/hora (YYYY-MM-DDTHH:MM).
-    @return: String formatada como 'YYYY-MM-DD HH:MM:00'.
+    """Converte a data/hora do formulário para o formato canónico do sistema.
+
+    O input vem de um campo datetime-local (YYYY-MM-DDTHH:MM, sem segundos).
+    Fixa os segundos a zero, garantindo que o timestamp usado na cifra coincide
+    exatamente com o usado na derivação da chave.
+
+    Args:
+        timestamp_str: data/hora no formato 'YYYY-MM-DDTHH:MM'.
+
+    Returns:
+        String no formato 'YYYY-MM-DD HH:MM:00'.
     """
     dt = datetime.strptime(timestamp_str, "%Y-%m-%dT%H:%M")
-    return dt.strftime("%Y-%m-%d %H:%M:00")     
+    return dt.strftime("%Y-%m-%d %H:%M:00")
 
 
 def derive_keys(email: str, timestamp: str) -> dict:
-    """
-    Deriva chaves AES e HMAC determinísticas a partir de um email, timestamp e segredo do sistema.
-    @param email: Email do utilizador.
-    @param timestamp: Momento temporal de referência.
-    @return: Dicionário contendo chaves hexadecimais e bytes para AES e HMAC.
+    """Deriva as chaves AES e HMAC de forma determinística.
+
+    Cada chave resulta do hash SHA-256 de uma string que combina um rótulo de
+    domínio ("AES" ou "HMAC"), o email, o segredo do servidor e a data-hora:
+
+        chave AES  = SHA256("AES|email|SEGREDO|data-hora")[:16]   (AES-128)
+        chave HMAC = SHA256("HMAC|email|SEGREDO|data-hora")
+
+    Os rótulos diferentes ("AES" vs "HMAC") fazem separação de domínio: garantem
+    que a chave de cifra e a de integridade são distintas, mesmo derivando do
+    mesmo segredo e dos mesmos dados. A dependência da data-hora é o que liga a
+    chave ao instante de desbloqueio.
+
+    Args:
+        email: email do utilizador.
+        timestamp: instante de referência (formato canónico).
+
+    Returns:
+        Dicionário com as chaves em hexadecimal e em bytes, mais email e timestamp.
     """
     normalized_email = normalize_email(email)
 
+    # Chave de cifra: 16 bytes (128 bits) tirados do início do digest SHA-256.
     aes_material = f"AES|{normalized_email}|{SYSTEM_SECRET}|{timestamp}"
     aes_digest = hashlib.sha256(aes_material.encode("utf-8")).digest()
     aes_key_bytes = aes_digest[:16]
 
+    # Chave de integridade: digest completo, com rótulo "HMAC" para a separar
+    # da chave de cifra (separação de domínio).
     hmac_material = f"HMAC|{normalized_email}|{SYSTEM_SECRET}|{timestamp}"
     hmac_digest = hashlib.sha256(hmac_material.encode("utf-8")).digest()
 
@@ -70,37 +120,57 @@ def derive_keys(email: str, timestamp: str) -> dict:
 
 
 def derive_current_key(email: str) -> dict:
-    """
-    Deriva a chave para o intervalo horário atual.
-    @param email: Email do utilizador.
-    @return: Dicionário com as chaves derivadas.
+    """Deriva a chave correspondente ao minuto atual.
+
+    Args:
+        email: email do utilizador.
+
+    Returns:
+        Dicionário com as chaves derivadas (ver derive_keys).
     """
     timestamp = get_current_hour_timestamp()
     return derive_keys(email, timestamp)
 
 
 def derive_future_key(email: str, timestamp_str: str) -> dict:
-    """
-    Deriva a chave para um instante futuro.
-    @param email: Email do utilizador.
-    @param timestamp_str: Timestamp futuro pretendido.
-    @return: Dicionário com as chaves derivadas.
+    """Deriva a chave para um instante futuro (usada apenas na cifra).
+
+    Atenção: esta chave é calculada no servidor para cifrar o ficheiro e NUNCA
+    deve ser devolvida ao utilizador para datas futuras — caso contrário a
+    cápsula poderia ser aberta antes do tempo. A interface não expõe esta função.
+
+    Args:
+        email: email do utilizador.
+        timestamp_str: data/hora futura (formato do formulário).
+
+    Returns:
+        Dicionário com as chaves derivadas.
     """
     normalized_timestamp = normalize_timestamp(timestamp_str)
     return derive_keys(email, normalized_timestamp)
 
 
 def derive_past_key(email: str, timestamp_str: str) -> dict:
-    """
-    Deriva a chave para um instante do passado.
-    @param email: Email do utilizador.
-    @param timestamp_str: Timestamp passado pretendido.
-    @return: Dicionário com as chaves derivadas.
-    @raise ValueError: Se o timestamp for futuro.
+    """Deriva a chave para um instante já decorrido (ou o momento atual).
+
+    É a função exposta a utilizadores registados (enhancement #5): podem
+    recuperar chaves do passado, mas a função recusa explicitamente qualquer
+    data futura. É esta recusa que mantém fechadas as cápsulas ainda por abrir.
+
+    Args:
+        email: email do utilizador.
+        timestamp_str: data/hora pretendida (formato do formulário).
+
+    Returns:
+        Dicionário com as chaves derivadas.
+
+    Raises:
+        ValueError: se o timestamp pedido for futuro.
     """
     normalized_timestamp = normalize_timestamp(timestamp_str)
     target = datetime.strptime(normalized_timestamp, "%Y-%m-%d %H:%M:%S")
 
+    # Barreira de segurança: nunca revelar chaves de datas que ainda não chegaram.
     if target > datetime.now():
         raise ValueError(
             "Só é possível obter chaves do passado ou do momento atual, nunca futuras."
@@ -112,13 +182,20 @@ def derive_past_key(email: str, timestamp_str: str) -> dict:
 # ─── AES-128-CBC ────────────────────────────────────────────────────────────
 
 def encrypt_file_aes_cbc(file_bytes: bytes, key_bytes: bytes) -> dict:
+    """Cifra dados com AES-128 em modo CBC, com padding PKCS7.
+
+    Gera um IV aleatório de 16 bytes a cada cifra (essencial: reutilizar IV com
+    a mesma chave em CBC compromete a confidencialidade). O CBC exige que os
+    dados sejam múltiplos do tamanho do bloco, daí o padding PKCS7.
+
+    Args:
+        file_bytes: conteúdo original.
+        key_bytes: chave AES de 16 bytes.
+
+    Returns:
+        Dicionário com o IV e o ciphertext (bytes).
     """
-    Cifra dados usando AES-128-CBC com preenchimento PKCS7.
-    @param file_bytes: Conteúdo original do ficheiro.
-    @param key_bytes: Chave AES de 16 bytes.
-    @return: Dicionário com o IV e o texto cifrado.
-    """
-    iv = os.urandom(16)
+    iv = os.urandom(16)  # IV novo e aleatório por operação
 
     padder = padding.PKCS7(128).padder()
     padded_data = padder.update(file_bytes) + padder.finalize()
@@ -131,12 +208,15 @@ def encrypt_file_aes_cbc(file_bytes: bytes, key_bytes: bytes) -> dict:
 
 
 def decrypt_file_aes_cbc(ciphertext: bytes, key_bytes: bytes, iv: bytes) -> bytes:
-    """
-    Decifra dados cifrados com AES-128-CBC.
-    @param ciphertext: Texto cifrado.
-    @param key_bytes: Chave AES.
-    @param iv: Vetor de inicialização utilizado.
-    @return: Conteúdo original decifrado.
+    """Decifra dados cifrados com AES-128-CBC e remove o padding PKCS7.
+
+    Args:
+        ciphertext: texto cifrado.
+        key_bytes: chave AES.
+        iv: o mesmo IV usado na cifra.
+
+    Returns:
+        O conteúdo original em bytes.
     """
     cipher = Cipher(algorithms.AES(key_bytes), modes.CBC(iv))
     decryptor = cipher.decryptor()
@@ -149,13 +229,21 @@ def decrypt_file_aes_cbc(ciphertext: bytes, key_bytes: bytes, iv: bytes) -> byte
 # ─── AES-128-CTR ────────────────────────────────────────────────────────────
 
 def encrypt_file_aes_ctr(file_bytes: bytes, key_bytes: bytes) -> dict:
+    """Cifra dados com AES-128 em modo CTR.
+
+    O CTR transforma a cifra de blocos numa cifra de fluxo, pelo que não precisa
+    de padding. Gera um nonce aleatório de 16 bytes que funciona como contador
+    inicial. Tal como o IV no CBC, este nonce NUNCA pode repetir-se com a mesma
+    chave: a reutilização expõe o XOR dos textos em claro.
+
+    Args:
+        file_bytes: conteúdo original.
+        key_bytes: chave AES.
+
+    Returns:
+        Dicionário com o nonce (em "iv") e o ciphertext.
     """
-    Cifra dados usando AES-128-CTR.
-    @param file_bytes: Conteúdo original.
-    @param key_bytes: Chave AES.
-    @return: Dicionário com o nonce e o texto cifrado.
-    """
-    nonce = os.urandom(16)
+    nonce = os.urandom(16)  # contador inicial, único por operação
 
     cipher = Cipher(algorithms.AES(key_bytes), modes.CTR(nonce))
     encryptor = cipher.encryptor()
@@ -165,12 +253,15 @@ def encrypt_file_aes_ctr(file_bytes: bytes, key_bytes: bytes) -> dict:
 
 
 def decrypt_file_aes_ctr(ciphertext: bytes, key_bytes: bytes, iv: bytes) -> bytes:
-    """
-    Decifra dados cifrados com AES-128-CTR.
-    @param ciphertext: Texto cifrado.
-    @param key_bytes: Chave AES.
-    @param iv: Nonce utilizado.
-    @return: Conteúdo original.
+    """Decifra dados cifrados com AES-128-CTR.
+
+    Args:
+        ciphertext: texto cifrado.
+        key_bytes: chave AES.
+        iv: o mesmo nonce usado na cifra.
+
+    Returns:
+        O conteúdo original em bytes.
     """
     cipher = Cipher(algorithms.AES(key_bytes), modes.CTR(iv))
     decryptor = cipher.decryptor()
@@ -180,9 +271,15 @@ def decrypt_file_aes_ctr(ciphertext: bytes, key_bytes: bytes, iv: bytes) -> byte
 # ─── Funções genéricas ──────────────────────────────────────────────────────
 
 def encrypt_file(file_bytes: bytes, key_bytes: bytes, aes_mode: str) -> dict:
-    """
-    Despacha o processo de cifra para o modo AES solicitado.
-    @param aes_mode: 'AES-128-CTR' ou 'AES-128-CBC'.
+    """Cifra um ficheiro, despachando para o modo AES pedido.
+
+    Args:
+        file_bytes: conteúdo original.
+        key_bytes: chave AES.
+        aes_mode: "AES-128-CTR" ou "AES-128-CBC" (CBC é o predefinido).
+
+    Returns:
+        Dicionário com IV/nonce e ciphertext.
     """
     if aes_mode == "AES-128-CTR":
         return encrypt_file_aes_ctr(file_bytes, key_bytes)
@@ -190,8 +287,16 @@ def encrypt_file(file_bytes: bytes, key_bytes: bytes, aes_mode: str) -> dict:
 
 
 def decrypt_file(ciphertext: bytes, key_bytes: bytes, iv: bytes, aes_mode: str) -> bytes:
-    """
-    Despacha o processo de decifra para o modo AES solicitado.
+    """Decifra um ficheiro, despachando para o modo AES pedido.
+
+    Args:
+        ciphertext: texto cifrado.
+        key_bytes: chave AES.
+        iv: IV (CBC) ou nonce (CTR) usado na cifra.
+        aes_mode: "AES-128-CTR" ou "AES-128-CBC".
+
+    Returns:
+        O conteúdo original em bytes.
     """
     if aes_mode == "AES-128-CTR":
         return decrypt_file_aes_ctr(ciphertext, key_bytes, iv)
@@ -204,7 +309,13 @@ def _build_hmac_message(
     email: str, timestamp: str, algorithm: str, hmac_algorithm: str,
     original_filename: str, iv: bytes, ciphertext: bytes
 ) -> bytes:
-    """Constrói a mensagem canónica para cálculo do HMAC."""
+    """Constrói a mensagem canónica sobre a qual se calcula o HMAC.
+
+    Inclui todos os metadados além do criptograma, de modo a que o HMAC proteja
+    não só o conteúdo cifrado mas também o email, o timestamp, os algoritmos, o
+    nome do ficheiro e o IV. Assim, alterar qualquer um destes campos invalida
+    o HMAC.
+    """
     return (
         email.encode("utf-8") + timestamp.encode("utf-8") + algorithm.encode("utf-8") +
         hmac_algorithm.encode("utf-8") + original_filename.encode("utf-8") + iv + ciphertext
@@ -215,7 +326,15 @@ def compute_hmac(
     hmac_key_bytes: bytes, email: str, timestamp: str, algorithm: str,
     hmac_algorithm: str, original_filename: str, iv: bytes, ciphertext: bytes
 ) -> str:
-    """Calcula o HMAC para verificar a integridade do ficheiro cifrado."""
+    """Calcula o HMAC (SHA-256 ou SHA-512) do pacote.
+
+    Segue o padrão Encrypt-then-MAC: o HMAC é calculado sobre o texto já cifrado
+    (mais os metadados), o que permite verificar a integridade antes de tentar
+    decifrar.
+
+    Returns:
+        O HMAC em hexadecimal.
+    """
     message = _build_hmac_message(
         email, timestamp, algorithm, hmac_algorithm, original_filename, iv, ciphertext
     )
@@ -227,7 +346,14 @@ def verify_hmac(
     hmac_key_bytes: bytes, email: str, timestamp: str, algorithm: str,
     hmac_algorithm: str, original_filename: str, iv: bytes, ciphertext: bytes, received_hmac: str
 ) -> bool:
-    """Verifica a integridade via HMAC usando comparação em tempo constante."""
+    """Verifica o HMAC recebido recalculando-o e comparando.
+
+    Usa hmac.compare_digest, que compara em tempo constante: o tempo de resposta
+    não depende de quantos caracteres coincidem, evitando ataques de temporização.
+
+    Returns:
+        True se o HMAC for válido, False caso contrário.
+    """
     expected = compute_hmac(
         hmac_key_bytes, email, timestamp, algorithm, hmac_algorithm,
         original_filename, iv, ciphertext,
@@ -241,7 +367,11 @@ def _build_signature_message(
     email: str, timestamp: str, algorithm: str, hmac_algorithm: str,
     original_filename: str, iv: bytes, ciphertext: bytes, hmac_tag: str
 ) -> bytes:
-    """Constrói a mensagem a ser assinada digitalmente pelo sistema."""
+    """Constrói a mensagem assinada pelo sistema.
+
+    Reutiliza a mensagem do HMAC e acrescenta a própria tag HMAC, para que a
+    assinatura cubra simultaneamente os metadados, o criptograma e o HMAC.
+    """
     return (
         _build_hmac_message(
             email, timestamp, algorithm, hmac_algorithm, original_filename, iv, ciphertext
@@ -253,7 +383,15 @@ def sign_package(
     private_key, email: str, timestamp: str, algorithm: str, hmac_algorithm: str,
     original_filename: str, iv: bytes, ciphertext: bytes, hmac_tag: str
 ) -> str:
-    """Assina o pacote com a chave privada RSA usando PSS + SHA256."""
+    """Assina o pacote com a chave privada RSA do sistema.
+
+    Usa o esquema RSA-PSS com SHA-256. O PSS é probabilístico (inclui salt),
+    sendo o esquema de assinatura RSA recomendado atualmente, mais robusto que
+    o antigo PKCS#1 v1.5.
+
+    Returns:
+        A assinatura codificada em Base64.
+    """
     message = _build_signature_message(
         email, timestamp, algorithm, hmac_algorithm, original_filename, iv, ciphertext, hmac_tag
     )
@@ -272,8 +410,17 @@ def verify_signature(
     public_key, email: str, timestamp: str, algorithm: str, hmac_algorithm: str,
     original_filename: str, iv: bytes, ciphertext: bytes, hmac_tag: str, signature_b64: str
 ) -> bool:
-    """Verifica a assinatura digital RSA do sistema."""
-    if not signature_b64: return False
+    """Verifica a assinatura RSA do sistema com a chave pública.
+
+    Reconstrói a mensagem assinada e valida a assinatura. Qualquer alteração aos
+    metadados, ao criptograma ou ao HMAC faz a verificação falhar. Uma assinatura
+    em falta ou inválida resulta em False (a função nunca lança exceção para fora).
+
+    Returns:
+        True se a assinatura for válida, False caso contrário.
+    """
+    if not signature_b64:
+        return False
     message = _build_signature_message(
         email, timestamp, algorithm, hmac_algorithm, original_filename, iv, ciphertext, hmac_tag
     )
@@ -288,6 +435,7 @@ def verify_signature(
         )
         return True
     except (InvalidSignature, ValueError):
+        # Assinatura inválida ou Base64 malformado: tratado como falha de verificação.
         return False
 
 
@@ -298,7 +446,16 @@ def build_encrypted_package(
     hmac_algorithm: str, iv: bytes, ciphertext: bytes, hmac_tag: str,
     signature: str = "", signature_algorithm: str = SIGNATURE_ALGORITHM
 ) -> str:
-    """Serializa o pacote de dados cifrados para JSON."""
+    """Serializa o pacote cifrado para JSON.
+
+    Os campos binários (IV e ciphertext) são codificados em Base64 para poderem
+    ser representados em texto. O pacote reúne tudo o que a decifra precisa:
+    metadados, IV, ciphertext, HMAC e assinatura. Note-se que a chave NUNCA é
+    incluída.
+
+    Returns:
+        O pacote como string JSON formatada.
+    """
     package = {
         "email": email, "timestamp": timestamp, "algorithm": aes_mode,
         "hmac_algorithm": hmac_algorithm, "original_filename": original_filename,
@@ -310,7 +467,15 @@ def build_encrypted_package(
 
 
 def load_encrypted_package(json_bytes: bytes) -> dict:
-    """Carrega e deserializa um pacote cifrado a partir de JSON."""
+    """Carrega um pacote cifrado a partir de JSON.
+
+    Descodifica os campos Base64 (IV e ciphertext) de volta para bytes. Usa
+    valores predefinidos para campos opcionais (hmac_algorithm, signature),
+    o que mantém compatibilidade com pacotes mais antigos.
+
+    Returns:
+        Dicionário com os campos do pacote prontos a usar.
+    """
     package = json.loads(json_bytes.decode("utf-8"))
     return {
         "email": package["email"], "timestamp": package["timestamp"],
@@ -326,6 +491,16 @@ def load_encrypted_package(json_bytes: bytes) -> dict:
 # ─── Tempo ──────────────────────────────────────────────────────────────────
 
 def is_unlock_time_reached(timestamp_str: str) -> bool:
-    """Verifica se a data/hora de desbloqueio do ficheiro já foi atingida."""
+    """Verifica se o instante de desbloqueio já chegou.
+
+    Compara a data-hora alvo do pacote com a hora atual do servidor. É a primeira
+    barreira da decifra: se ainda não chegou o momento, o ficheiro não é processado.
+
+    Args:
+        timestamp_str: data-hora de desbloqueio (formato canónico).
+
+    Returns:
+        True se a hora atual for igual ou posterior à data-hora alvo.
+    """
     target_time = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S")
     return datetime.now() >= target_time

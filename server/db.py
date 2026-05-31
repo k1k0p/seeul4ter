@@ -1,3 +1,10 @@
+"""
+Acesso à base de dados SQLite.
+
+Centraliza a abertura de ligações e a criação do esquema (tabelas de ficheiros
+cifrados e de utilizadores).
+"""
+
 import os
 import sqlite3
 
@@ -5,10 +12,14 @@ from config import DATABASE_PATH
 
 
 def get_connection():
-    """
-    Estabelece uma ligação à base de dados SQLite.
-    Garante que o diretório da base de dados existe antes de conectar.
-    @return: Objeto de conexão sqlite3 configurado com row_factory.
+    """Abre uma ligação à base de dados SQLite.
+
+    Garante que a pasta da base de dados existe antes de ligar e define o
+    row_factory como sqlite3.Row, o que permite aceder às colunas pelo nome
+    (ex.: row["email"]) em vez de por índice.
+
+    Returns:
+        Um objeto de ligação sqlite3 pronto a usar.
     """
     os.makedirs(os.path.dirname(DATABASE_PATH), exist_ok=True)
     conn = sqlite3.connect(DATABASE_PATH)
@@ -17,13 +28,19 @@ def get_connection():
 
 
 def init_db():
-    """
-    Inicializa a estrutura da base de dados, criando as tabelas necessárias
-    para o registo de ficheiros cifrados e gestão de utilizadores.
+    """Cria as tabelas da aplicação, se ainda não existirem.
+
+    Define duas tabelas: 'encrypted_files' (histórico das operações de cifra,
+    apenas metadados — nunca chaves nem conteúdo) e 'users' (credenciais, com a
+    password guardada como hash + salt e o email único).
+
+    O CREATE TABLE IF NOT EXISTS torna a função idempotente: pode ser chamada em
+    todos os arranques sem apagar nem duplicar dados.
     """
     conn = get_connection()
     cursor = conn.cursor()
 
+    # Histórico de cifras: guarda só metadados da operação.
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS encrypted_files (
@@ -39,6 +56,7 @@ def init_db():
         """
     )
 
+    # Utilizadores: email único e password protegida (hash + salt).
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS users (

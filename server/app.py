@@ -1,3 +1,15 @@
+"""
+SEE-U-L4TER — Cápsula do Tempo Criptográfica.
+
+Aplicação web (Flask) que cifra ficheiros de forma a que só possam ser
+decifrados a partir de uma data/hora futura. A chave de cifra é derivada de
+forma determinística a partir de (email, data-hora, segredo do servidor), pelo
+que o instante de desbloqueio fica criptograficamente ligado à própria chave.
+
+Cada pacote cifrado é protegido por um HMAC (integridade) e por uma assinatura
+digital RSA do sistema (autenticidade), ambos verificados antes da decifra.
+"""
+
 from datetime import datetime, timedelta
 import os
 import functools
@@ -33,22 +45,33 @@ app = Flask(
     static_folder=os.path.join(BASE_DIR, "static"),
 )
 
+# Chave usada pelo Flask para assinar os cookies de sessão. Vem da configuração
+# (idealmente de uma variável de ambiente) e nunca deve ser fixa em produção,
+# caso contrário seria possível forjar sessões de utilizadores.
 app.secret_key = FLASK_SECRET_KEY
 
-init_db()
+init_db()                # cria as tabelas da base de dados, se ainda não existirem
 ensure_system_keypair()  # gera o par RSA do sistema na primeira execução
 
 
 # ─── Autenticação ────────────────────────────────────────────────────────────
 
 def login_required(f):
-    """
-    Decorador para restringir o acesso a rotas apenas a utilizadores autenticados.
-    @param f: A função da rota a ser decorada.
-    @return: A função decorada que redireciona para o login se necessário.
+    """Decorador que restringe uma rota a utilizadores autenticados.
+
+    Verifica se existe um email na sessão; caso contrário, redireciona o
+    utilizador para a página de login antes de a rota ser executada.
+
+    Args:
+        f: a função-rota a proteger.
+
+    Returns:
+        A função decorada, que só executa a rota original se houver sessão ativa.
     """
     @functools.wraps(f)
     def decorated(*args, **kwargs):
+        # A sessão do Flask é assinada (não cifrada); confiamos nela apenas
+        # porque a secret_key impede que seja forjada do lado do cliente.
         if "user_email" not in session:
             return redirect(url_for("login_page"))
         return f(*args, **kwargs)
@@ -57,17 +80,24 @@ def login_required(f):
 
 @app.route("/register", methods=["GET", "POST"])
 def register_page():
-    """
-    Processa o registo de novos utilizadores.
-    @return: Renderiza o template de registo com mensagens de erro ou sucesso.
+    """Regista um novo utilizador.
+
+    Em GET mostra o formulário; em POST valida os campos e tenta criar a conta,
+    redirecionando para o login em caso de sucesso.
+
+    Returns:
+        O template de registo (com erro) ou um redirect para a página de login.
     """
     error = None
     if request.method == "POST":
+        # O email é normalizado (sem espaços, em minúsculas) porque é usado na
+        # derivação das chaves — tem de ser idêntico aqui e na cifra/decifra.
         email = request.form.get("email", "").strip().lower()
         password = request.form.get("password", "").strip()
         if not email or not password:
             error = "Preenche o email e a password."
         else:
+            # register_user guarda a password como hash + salt, nunca em claro.
             ok, msg = register_user(email, password)
             if ok:
                 flash("Conta criada com sucesso! Faz login.", "success")
@@ -79,9 +109,15 @@ def register_page():
 
 @app.route("/login", methods=["GET", "POST"])
 def login_page():
-    """
-    Processa a autenticação do utilizador.
-    @return: Redireciona para o índice se o login for bem-sucedido.
+    """Autentica um utilizador existente.
+
+    Em POST verifica as credenciais e, se forem válidas, guarda o email na
+    sessão. A mensagem de erro é deliberadamente genérica (não revela se foi
+    o email ou a password que falhou) para não facilitar a enumeração de contas.
+
+    Returns:
+        Um redirect para a página inicial em caso de sucesso, ou o template de
+        login com mensagem de erro em caso de falha.
     """
     error = None
     if request.method == "POST":
@@ -97,11 +133,12 @@ def login_page():
 
 @app.route("/logout")
 def logout():
+    """Termina a sessão do utilizador.
+
+    Returns:
+        Um redirect para a página inicial (que é pública).
     """
-    Termina a sessão do utilizador atual.
-    @return: Redireciona para a página inicial.
-    """
-    session.clear()
+    session.clear()  # remove todos os dados de sessão, incluindo o email
     return redirect(url_for("index"))
 
 
@@ -109,9 +146,15 @@ def logout():
 
 @app.route("/", methods=["GET", "POST"])
 def index():
-    """
-    Página principal que gere a derivação de chaves atuais e passadas.
-    @return: Renderiza o template inicial com resultados de chaves.
+    """Página inicial: derivação da chave atual e de chaves passadas.
+
+    A chave do momento atual está disponível a qualquer visitante (interface
+    não autenticada, como pede o enunciado). O acesso a chaves de datas já
+    decorridas exige sessão iniciada. Chaves de datas futuras nunca são
+    reveladas aqui — caso contrário a cápsula podia ser aberta antes do tempo.
+
+    Returns:
+        O template inicial, com a chave atual e/ou a chave passada quando aplicável.
     """
     current_result = None
     past_result = None
@@ -126,6 +169,8 @@ def index():
                 if not email:
                     raise ValueError("Tens de indicar um email.")
                 current_result = derive_current_key(email)
+                # A chave atual só é válida durante o minuto corrente; guardamos
+                # o instante de expiração para a deixar de mostrar depois disso.
                 dt = datetime.strptime(current_result["timestamp"], "%Y-%m-%d %H:%M:%S")
                 expires = dt + timedelta(minutes=1)
                 current_result["period"] = f"{dt.strftime('%H:%M')} – {expires.strftime('%H:%M')}"
@@ -134,6 +179,8 @@ def index():
                 session["last_current_result"] = current_result
 
             elif form_type == "past_key":
+                # Enhancement #5: utilizadores registados acedem a chaves do
+                # passado. derive_past_key recusa explicitamente datas futuras.
                 if not logged_in:
                     raise ValueError("Tens de fazer login para aceder a chaves do passado.")
                 past_datetime = request.form.get("past_datetime", "").strip()
@@ -145,9 +192,13 @@ def index():
         except Exception as exc:
             flash(f"Erro: {exc}", "error")
 
+        # Padrão Post/Redirect/Get: redireciona após o POST para evitar que o
+        # reenvio do formulário (refresh) repita a operação.
         return redirect(url_for("index"))
 
     else:
+        # Em GET, recupera a última chave atual guardada em sessão, mas só a
+        # mostra se ainda estiver dentro da janela de validade (1 minuto).
         last = session.get("last_current_result")
         if last:
             expires = datetime.strptime(last["expires_at"], "%Y-%m-%dT%H:%M:%S")
@@ -170,9 +221,16 @@ def index():
 @app.route("/encrypt", methods=["GET", "POST"])
 @login_required
 def encrypt_page():
-    """
-    Processa a cifra de ficheiros com chaves derivadas do futuro.
-    @return: Response contendo o ficheiro cifrado (download).
+    """Cifra um ficheiro para uma data/hora futura.
+
+    Deriva internamente a chave da data futura (nunca a devolve ao utilizador),
+    cifra o ficheiro, calcula o HMAC, assina o conjunto com a chave privada RSA
+    do sistema e devolve um pacote JSON com todos os metadados necessários à
+    decifra posterior. Regista também a operação no histórico.
+
+    Returns:
+        Uma Response com o pacote cifrado (.encrypted.json) como download, ou o
+        template de cifra com erro se algo falhar.
     """
     error = None
 
@@ -184,6 +242,8 @@ def encrypt_page():
             aes_mode = request.form.get("aes_mode", "AES-128-CBC")
             hmac_algorithm = request.form.get("hmac_mode", "HMAC-SHA256")
 
+            # Validação dos modos: só aceitamos valores conhecidos, evitando que
+            # um valor arbitrário vindo do formulário chegue às funções de cifra.
             if aes_mode not in ("AES-128-CBC", "AES-128-CTR"):
                 aes_mode = "AES-128-CBC"
             if hmac_algorithm not in ("HMAC-SHA256", "HMAC-SHA512"):
@@ -192,6 +252,8 @@ def encrypt_page():
             if not email or not future_datetime or not uploaded_file:
                 raise ValueError("Preenche o email, a data/hora e escolhe um ficheiro.")
 
+            # A chave futura é derivada APENAS aqui, do lado do servidor, e nunca
+            # é incluída no pacote nem mostrada — é o que mantém a cápsula fechada.
             key_data = derive_future_key(email, future_datetime)
             file_bytes = uploaded_file.read()
 
@@ -200,6 +262,8 @@ def encrypt_page():
 
             encrypted_data = encrypt_file(file_bytes, key_data["aes_key_bytes"], aes_mode)
 
+            # HMAC sobre os metadados + IV + ciphertext (Encrypt-then-MAC):
+            # garante integridade e autenticidade do criptograma.
             hmac_tag = compute_hmac(
                 hmac_key_bytes=key_data["hmac_key_bytes"],
                 email=key_data["email"],
@@ -211,6 +275,8 @@ def encrypt_page():
                 ciphertext=encrypted_data["ciphertext"],
             )
 
+            # Assinatura digital RSA do sistema (enhancement #3): prova que o
+            # pacote foi produzido por este servidor e não foi adulterado.
             signature = sign_package(
                 private_key=load_private_key(),
                 email=key_data["email"],
@@ -238,6 +304,8 @@ def encrypt_page():
             output_filename = f"{uploaded_file.filename}.encrypted.json"
             created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+            # Guarda apenas metadados da operação no histórico (nunca a chave
+            # nem o conteúdo do ficheiro).
             insert_encrypted_file(
                 email=key_data["email"],
                 original_filename=uploaded_file.filename,
@@ -263,9 +331,16 @@ def encrypt_page():
 @app.route("/decrypt", methods=["GET", "POST"])
 @login_required
 def decrypt_page():
-    """
-    Processa a decifra de ficheiros após validação de data, assinatura e integridade.
-    @return: Response contendo o ficheiro decifrado (download).
+    """Decifra um ficheiro, após quatro verificações de segurança.
+
+    Pela ordem: (1) o instante de desbloqueio já foi atingido; (2) a assinatura
+    RSA do sistema é válida; (3) o HMAC confirma a integridade; (4) a chave AES
+    fornecida corresponde à que se deriva do (email, data-hora) do pacote. Só se
+    as quatro passarem é que o ficheiro é decifrado.
+
+    Returns:
+        Uma Response com o ficheiro original como download, ou o template de
+        decifra com erro se alguma verificação falhar.
     """
     error = None
 
@@ -279,13 +354,17 @@ def decrypt_page():
 
             package = load_encrypted_package(uploaded_file.read())
 
+            # 1. Verificação temporal: recusa a decifra antes da data/hora.
             if not is_unlock_time_reached(package["timestamp"]):
                 raise ValueError(
                     f"O ficheiro só pode ser decifrado a partir de {package['timestamp']}."
                 )
 
+            # Reconstrói as chaves (AES e HMAC) a partir do email e timestamp do
+            # pacote — não vêm no ficheiro, são derivadas com o segredo do servidor.
             key_data = derive_keys(package["email"], package["timestamp"])
 
+            # 2. Assinatura RSA do sistema, verificada antes de qualquer decifra.
             signature_valid = verify_signature(
                 public_key=load_public_key(),
                 email=package["email"],
@@ -304,6 +383,7 @@ def decrypt_page():
                     "Falha na verificação da assinatura digital RSA do sistema."
                 )
 
+            # 3. Integridade via HMAC (comparação em tempo constante na função).
             hmac_valid = verify_hmac(
                 hmac_key_bytes=key_data["hmac_key_bytes"],
                 email=package["email"],
@@ -319,6 +399,8 @@ def decrypt_page():
             if not hmac_valid:
                 raise ValueError("Falha na verificação de integridade: HMAC inválido.")
 
+            # 4. A chave fornecida tem de coincidir com a chave derivada. Isto
+            # confirma que o utilizador tem a chave certa para aquele instante.
             try:
                 aes_key_bytes = bytes.fromhex(key_hex)
             except ValueError as exc:
@@ -351,9 +433,13 @@ def decrypt_page():
 @app.route("/history")
 @login_required
 def history_page():
-    """
-    Lista o histórico de ficheiros cifrados do utilizador.
-    @return: Renderiza o template de histórico.
+    """Mostra o histórico de cifras do utilizador autenticado.
+
+    Filtra os registos pelo email da sessão, para que cada utilizador veja
+    apenas as suas operações e não as de terceiros.
+
+    Returns:
+        O template de histórico com os registos do utilizador.
     """
     records = get_encrypted_files_by_email(session["user_email"])
     return render_template("history.html", records=records)
@@ -362,12 +448,20 @@ def history_page():
 @app.route("/public-key")
 @login_required
 def public_key_page():
-    """
-    Disponibiliza a chave pública RSA do sistema para validação externa.
-    @return: Response contendo a chave pública em formato PEM.
+    """Disponibiliza a chave pública RSA do sistema (PEM).
+
+    Permite que as assinaturas dos pacotes sejam verificadas externamente
+    (por exemplo, com o openssl). Só a chave pública é exposta; a privada
+    permanece no servidor.
+
+    Returns:
+        Uma Response de texto com a chave pública em formato PEM.
     """
     return Response(get_public_key_pem(), mimetype="text/plain")
 
 
 if __name__ == "__main__":
+    # debug=True e o servidor embutido destinam-se apenas a desenvolvimento.
+    # ssl_context ativa HTTPS com um certificado auto-assinado, cifrando o canal
+    # entre o browser e o servidor (passwords, chaves e ficheiros não viajam em claro).
     app.run(debug=True, port=5001, ssl_context=("ssl_cert.pem", "ssl_key.pem"))
